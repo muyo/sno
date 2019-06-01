@@ -1,0 +1,18 @@
+language: go
+
+go:
+  - "1.11"
+  - "1.12"
+  - "master"
+
+matrix:
+  allow_failures:
+    - go: "master"
+  fast_finish: true
+
+script:
+  - go vet ./...
+  - go test -v -tags=test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
