@@ -4,7 +4,7 @@ A spec for **unique IDs in distributed systems** based on the Snowflake design, 
 
 This repository contains a **Go** library for generating such IDs. 
 
-## [![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno)](https://goreportcard.com/report/github.com/muyo/sno) [![GoDoc](https://godoc.org/github.com/muyo/sno?status.svg)](https://godoc.org/github.com/muyo/sno) [![license](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
+## [![GoDoc](https://godoc.org/github.com/muyo/sno?status.svg)](https://godoc.org/github.com/muyo/sno) [![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno)](https://goreportcard.com/report/github.com/muyo/sno) [![Travis build: master](https://travis-ci.org/muyo/sno.svg)](https://travis-ci.org/muyo/sno) [![license](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
 
 ```bash
 go get -u github.com/muyo/sno
@@ -59,7 +59,7 @@ Partitions are one of several friends you have to get you those guarantees. A pa
 ```go
 generator, err := sno.NewGenerator(&sno.GeneratorSnapshot{
 	Partition: sno.Partition{65, 255}, // the same as: sno.Partition{'A', 255}
-})
+}, nil)
 ```
 
 Multiple generators can share a partition by dividing the sequence pool between them (➜ [Sequence sharding](#sequence-sharding)).
@@ -140,14 +140,14 @@ generator1, err := sno.NewGenerator(&sno.GeneratorSnapshot{
 	Partition: sno.Partition{'A', 0},
 	SequenceMin: 0,
 	SequenceMax: 32767 // 32768 - 1
-})
+}, nil)
 
 // In process/container/remote host #2
 generator2, err := sno.NewGenerator(&sno.GeneratorSnapshot{
 	Partition: sno.Partition{'A', 0},
 	SequenceMin: 32768,
 	SequenceMax: 65535 // 65536 - 1
-})
+}, nil)
 ```
 
 You will notice that we have simply divided our total pool of 65,536 IDs per 4msec into 2 even and **non-overlapping** sections. In the first snapshot, `SequenceMin` could be omitted - and `SequenceMax` in the second, as those are the defaults used when they are not defined. You will get an error when trying to set limits above the capacity of generators, but since the library is oblivious to your setup - it cannot warn you about overlaps and cannot resize on its own either. 
@@ -163,7 +163,7 @@ How about...
 ```go
 var requestIDGenerator, _ = sno.NewGenerator(&GeneratorSnapshot{
 	SequenceMax: 32767,
-})
+}, nil)
 
 type Service byte
 type Call byte

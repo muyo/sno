@@ -20,7 +20,7 @@ func TestGenerator_NewNoOverflow(t *testing.T) {
 			Partition:   Partition{255, 255},
 			SequenceMin: seqPool,
 			SequenceMax: 2*seqPool - 1,
-		})
+		}, nil)
 	)
 
 	// Must not fail.

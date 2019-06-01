@@ -6,7 +6,10 @@ import (
 )
 
 const (
-	SizeBinary  = 10
+	// SizeBinary is the length of an ID in its binary array representation.
+	SizeBinary = 10
+
+	// SizeEncoded is the length of an ID in its canonical base-32 encoded string representation.
 	SizeEncoded = 16
 )
 

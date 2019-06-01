@@ -35,6 +35,8 @@ type Generator struct {
 	seqOverflowChan   chan<- *SequenceOverflowNotification
 }
 
+// SequenceOverflowNotification contains information pertaining to the current state of a Generator
+// while it is overflowing.
 type SequenceOverflowNotification struct {
 	Now   time.Time // Time of tick.
 	Count uint32    // Number of currently overflowing generation calls.
@@ -58,7 +60,7 @@ type GeneratorSnapshot struct {
 }
 
 // NewGenerator returns a new generator based on the optional Snapshot.
-func NewGenerator(snapshot *GeneratorSnapshot) (*Generator, error) {
+func NewGenerator(snapshot *GeneratorSnapshot, c chan<- *SequenceOverflowNotification) (*Generator, error) {
 	if snapshot == nil {
 		var (
 			err error
@@ -75,6 +77,7 @@ func NewGenerator(snapshot *GeneratorSnapshot) (*Generator, error) {
 			seqMin:          0,
 			seqMax:          MaxSequence,
 			seqOverflowCond: sync.NewCond(&sync.Mutex{}),
+			seqOverflowChan: c,
 			drifts:          new(uint32),
 			wallHi:          new(int64),
 			monoHi:          new(int64),
@@ -110,6 +113,7 @@ func NewGenerator(snapshot *GeneratorSnapshot) (*Generator, error) {
 		seqMin:          uint32(snap.SequenceMin),
 		seqMax:          uint32(snap.SequenceMax),
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
+		seqOverflowChan: c,
 		drifts:          &snap.Drifts,
 		wallHi:          &snap.WallHi,
 		monoHi:          &snap.MonoHi,

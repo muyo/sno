@@ -5,7 +5,7 @@ package sno
 // about the order of execution, so this runs after all the encoding_{arch}.go files, which is the point.
 func init() {
 	var err error
-	if generator, err = NewGenerator(nil); err != nil {
+	if generator, err = NewGenerator(nil, nil); err != nil {
 		panic(err)
 	}
 

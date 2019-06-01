@@ -6,6 +6,8 @@ var (
 	errInvalidID = &InvalidIDError{}
 )
 
+// InvalidIDError gets returned when attempting to unmarshal or decode an ID from data that
+// is either invalid or in an unknown format.
 type InvalidIDError struct{}
 
 func (e *InvalidIDError) Error() string { return "ID is invalid or encoded in unknown format" }
