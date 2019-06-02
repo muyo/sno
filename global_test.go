@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestGlobal_FromEncodedString(t *testing.T) {
+func TestGlobal_FromEncodedString_Valid(t *testing.T) {
 	src := "brpk4q72xwf2m63l"
 	expected := ID{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}
 
@@ -19,7 +19,14 @@ func TestGlobal_FromEncodedString(t *testing.T) {
 	}
 }
 
-func TestGlobal_FromEncodedBytes(t *testing.T) {
+func TestGlobal_FromEncodedString_Invalid(t *testing.T) {
+	_, err := FromEncodedString("012brpk4q72xwf2m63l1245453gfdgxz")
+	if err != errInvalidID {
+		t.Errorf("expected error [%s], got [%s]", errInvalidID, err)
+	}
+}
+
+func TestGlobal_FromEncodedBytes_Valid(t *testing.T) {
 	src := []byte("brpk4q72xwf2m63l")
 	expected := ID{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}
 
@@ -30,6 +37,13 @@ func TestGlobal_FromEncodedBytes(t *testing.T) {
 
 	if actual != expected {
 		t.Errorf("expected [%v], got [%v]", expected, actual)
+	}
+}
+
+func TestGlobal_FromEncodedBytes_Invalid(t *testing.T) {
+	_, err := FromEncodedBytes([]byte("012brpk4q72xwf2m63l1245453gfdgxz"))
+	if err != errInvalidID {
+		t.Errorf("expected error [%s], got [%s]", errInvalidID, err)
 	}
 }
 

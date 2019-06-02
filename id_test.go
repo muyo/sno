@@ -20,6 +20,13 @@ func TestID_Time(t *testing.T) {
 	if actual != expected {
 		t.Errorf("expected [%v], got [%v]", expected, actual)
 	}
+
+	id = NewWithTime(255, tn)
+	actual = id.Time().UnixNano() / TimeUnit
+
+	if actual != expected {
+		t.Errorf("expected [%v], got [%v]", expected, actual)
+	}
 }
 
 func TestID_Timestamp(t *testing.T) {
@@ -28,6 +35,13 @@ func TestID_Timestamp(t *testing.T) {
 
 	expected := tn.UnixNano() / TimeUnit * timeUnitStep // Drop precision for the comparison.
 	actual := id.Timestamp()
+
+	if actual != expected {
+		t.Errorf("expected [%v], got [%v]", expected, actual)
+	}
+
+	id = NewWithTime(255, tn)
+	actual = id.Timestamp()
 
 	if actual != expected {
 		t.Errorf("expected [%v], got [%v]", expected, actual)
@@ -104,7 +118,7 @@ func TestID_UnmarshalText_Invalid(t *testing.T) {
 	err := id.UnmarshalText([]byte("012brpk4q72xwf2m63l1245453gfdgxz"))
 
 	if err != errInvalidID {
-		t.Errorf("expected [%s], got [%s]", errInvalidID, err)
+		t.Errorf("expected error [%s], got [%s]", errInvalidID, err)
 	}
 }
 
@@ -153,7 +167,7 @@ func TestID_UnmarshalJSON_Invalid(t *testing.T) {
 	err := id.UnmarshalJSON([]byte("\"012brpk4q72xwf2m63l1245453gfdgxz\""))
 
 	if err != errInvalidID {
-		t.Errorf("expected [%s], got [%s]", errInvalidID, err)
+		t.Errorf("expected error [%s], got [%s]", errInvalidID, err)
 	}
 }
 

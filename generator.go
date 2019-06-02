@@ -183,8 +183,7 @@ func (g *Generator) New(meta byte) (id ID) {
 		g.seqOverflowCount--
 		g.seqOverflowCond.L.Unlock()
 
-		// Reset of seq may also mean a backwards drift, so we run from scratch.
-		return New(meta)
+		return g.New(meta)
 	}
 
 	// Time progression branch.
@@ -216,19 +215,22 @@ func (g *Generator) New(meta byte) (id ID) {
 	if wallHi = atomic.LoadInt64(g.wallHi); wallNow >= wallHi {
 		g.regression.Unlock()
 
-		return New(meta)
+		return g.New(meta)
 	}
 
 	monoNow += g.monoOffset
 	monoHi := *g.monoHi // Safe, only write that ever happens to monoHi is inside this branch and we're in a mutex.
 
 	if monoNow > monoHi {
-		// Branch for *the one* routine that gets to apply the drift.
-		// wallHi - wallNow represents the size of the drift in wall clock time. monoHi becomes a moment
-		// in the future of the monotonic clock.
+		// Branch for the one routine that gets to apply the drift.
+		// wallHi - wallNow represents the size of the drift in wall clock time. We need to readjust
+		// back from 4msecs to nanoseconds since that's how our mono clock is running.
+		driftNsecs := (wallHi - wallNow) * TimeUnit
+
+		// monoHi becomes a moment in the future of the monotonic clock.
 		// Sequence gets reset on drifts as time changed. Every other contender is in a branch
 		// that ends in a rerun so they'll pick up all the changes.
-		atomic.StoreInt64(g.monoHi, monoNow+wallHi-wallNow)
+		atomic.StoreInt64(g.monoHi, monoNow+driftNsecs)
 		atomic.StoreInt64(g.wallHi, wallNow)
 		atomic.StoreUint32(g.seq, g.seqMin)
 
@@ -260,7 +262,7 @@ func (g *Generator) New(meta byte) (id ID) {
 
 	time.Sleep(time.Duration(monoHi - monoNow))
 
-	return New(meta)
+	return g.New(meta)
 }
 
 // NewWithTime generates a new ID using the given time for the timestamp.
@@ -271,7 +273,7 @@ func (g *Generator) New(meta byte) (id ID) {
 // online.
 func (g *Generator) NewWithTime(meta byte, t time.Time) ID {
 	var id ID
-	g.setTimestamp(&id, (t.UnixNano()-epochNsec)/TimeUnit)
+	g.setTimestamp(&id, (epochNsec+t.UnixNano())/TimeUnit)
 	g.setPartition(&id, meta)
 
 	// TODO(alcore) Decouple from time-relative sequence?
@@ -377,18 +379,18 @@ func (g *Generator) seqOverflowLoop() {
 			continue
 		}
 
-		// This handles an edge case where we've got calls locked on an overflow and suddenly no more
+		// Handles an edge case where we've got calls locked on an overflow and suddenly no more
 		// calls to Generate() come in, meaning there's no one to actually reset the sequence.
 		var (
 			wallNow = (epochNsec + t.UnixNano()) / TimeUnit
 			wallHi  = atomic.LoadInt64(g.wallHi)
 		)
 
-		if wallNow > wallHi && atomic.CompareAndSwapInt64(g.wallHi, wallHi, wallNow) {
+		if wallNow > wallHi {
 			atomic.StoreUint32(g.seq, g.seqMin)
 			g.seqOverflowCond.Broadcast()
 
-			continue // Superfluous but left for readability of flow.
+			continue // Left for readability of flow.
 		}
 	}
 }
@@ -402,12 +404,13 @@ func genPartition() (p Partition, err error) {
 }
 
 func sanitizeSnapshotBounds(s *GeneratorSnapshot) error {
-	// Allow for the zero value of SequenceMax to pass as the default max if and only if SequenceMin
-	// is also zero. If the latter is not the case, we'll flip their order and use min as max before
-	// checking other reqs.
-	if s.SequenceMax == 0 && s.SequenceMin == 0 {
+	// Zero value of SequenceMax will pass as the default max if and only if SequenceMin is not already
+	// default max (as the range can be defined in either order).
+	if s.SequenceMax == 0 && s.SequenceMin != MaxSequence {
 		s.SequenceMax = MaxSequence
-	} else if s.SequenceMin == s.SequenceMax {
+	}
+
+	if s.SequenceMin == s.SequenceMax {
 		return &InvalidGeneratorBoundsError{
 			Cur: s.Sequence,
 			Min: s.SequenceMin,
