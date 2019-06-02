@@ -105,8 +105,8 @@ TEXT ·decodeVector(SB), NOSPLIT, $16-32
     MOVQ  interleave<>+0(SB),    INTERLEAVE
 
     // The entirety of this function is simply the inverse of encodeVector.
-	MOVQ  src+8(FP), BX
-	MOVQ  dst+0(FP), DX
+    MOVQ  src+8(FP), BX
+    MOVQ  dst+0(FP), DX
     MOVOU (BX), X0
 
     PSUBB  CHARSET_BEGIN, X0
@@ -128,7 +128,6 @@ TEXT ·decodeVector(SB), NOSPLIT, $16-32
     PEXTQ  INTERLEAVE, R9, R9
     BSWAPQ R9
     SHRQ   $24, R9
-
 
     MOVQ R8, 0(DX)
     MOVQ R9, 5(DX)

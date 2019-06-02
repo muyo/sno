@@ -39,15 +39,6 @@ func (id ID) Timestamp() int64 {
 	msecs |= int64(id[4]) >> 1
 
 	return msecs*4 - epochMsec
-	// The entirety of the above could be done with some simple asm, but the func would stop
-	// being inlineable. It's 6 instructions vs 17 in the above.
-	//    MOVQ   id+0(FP), AX
-	//    BSWAPQ AX
-	//    SHRQ   $25, AX 			// Gets rid of the 3 lower bytes and the tick-tock bit.
-	//    MOVQ   $885179647000, BX 	// epochMsec -885 179 647 000
-	//    LEAQ   (BX)(AX*4), BX
-	//    MOVQ   BX, ret+16(FP)
-	//    RET
 }
 
 // Meta returns the metabyte of the ID.

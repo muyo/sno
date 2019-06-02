@@ -14,7 +14,8 @@ const (
 	epochNsec = Epoch * 1e9
 
 	// TimeUnit is the time unit timestamps are embedded with - 4msec, handled as nanoseconds internally.
-	TimeUnit = 4e6
+	TimeUnit     = timeUnitStep * 1e6
+	timeUnitStep = 4
 
 	// MaxTimestamp is the max number of time units that can be embedded in an ID's timestamp.
 	// Corresponds to 2067-09-25 19:01:42.548 UTC in our custom epoch.
@@ -28,7 +29,7 @@ const (
 	minSequencePoolSize = 16
 
 	tickRate    = TimeUnit / tickRateDiv
-	tickRateDiv = 4
+	tickRateDiv = timeUnitStep
 )
 
 //go:linkname now time.now
@@ -39,8 +40,8 @@ func now() (sec int64, nsec int32, mono int64)
 func nanotime() (wall int64, mono int64) {
 	var (
 		wallNowSec, wallNowNsec, monoNow = now()
-		wallnow                          = wallNowSec*1e9 + int64(wallNowNsec) - epochNsec
+		wallnow                          = (epochNsec + wallNowSec*1e9 + int64(wallNowNsec)) / TimeUnit
 	)
 
-	return wallnow / TimeUnit, monoNow
+	return wallnow, monoNow
 }
