@@ -1,3 +1,4 @@
+// Package sno provides generators of compact unique IDs with embedded metadata.
 package sno
 
 import (
@@ -11,28 +12,28 @@ import (
 // Partition represents a fixed identifier of the given generator.
 type Partition [2]byte
 
-// Generator is responsible for generating new IDs scoped to a given fixed Partition and
-// managing their sequence.
-type Generator struct {
-	partition Partition // Immutable, assigned at object creation.
+// GeneratorSnapshot represents the internal bookkeeping data of a Generator at some point in time.
+//
+// Snapshots serve both as configuration and a means of restoring generators across restarts,
+// to ensure newly generated IDs don't overwrite IDs generated before going offline.
+type GeneratorSnapshot struct {
+	// The Partition the generator is scoped to. A zero value ({0, 0}) is valid and will be used.
+	Partition Partition `json:"partition"`
 
-	// Time bookkeeping.
-	drifts     *uint32 // Uses only the LSB for the tick-tock but serves as a counter as well.
-	wallHi     *int64
-	monoHi     *int64
-	monoOffset int64 // Immutable, assigned at object creation.
-	regression *sync.Mutex
+	// Sequence pool bounds (inclusive). Can be given in either order - lower value will become lower bound.
+	// When SequenceMax is 0 and SequenceMin != 65535, SequenceMax will be set to 65535.
+	SequenceMin uint16 `json:"sequenceMin"`
+	SequenceMax uint16 `json:"sequenceMax"`
 
-	// Sequence bookkeeping.
-	seq    *uint32 // Uses only the low 16-bits.
-	seqMin uint32  // Immutable, assigned at object creation.
-	seqMax uint32  // Immutable, assigned at object creation.
+	// Current sequence number. When 0, it will be set to SequenceMin. May overflow SequenceMax,
+	// but not underflow SequenceMin.
+	Sequence uint32 `json:"sequence"`
 
-	// Sequence overflow.
-	seqOverflowCount  uint32 // Behind seqOverflowCond lock.
-	seqOverflowCond   *sync.Cond
-	seqOverflowTicker *time.Ticker
-	seqOverflowChan   chan<- *SequenceOverflowNotification
+	Now        int64  `json:"now"`        // Wall time the snapshot was taken at in sno time units and in our epoch.
+	WallHi     int64  `json:"wallHi"`     // Highest wall clock time recorded.
+	MonoLo     int64  `json:"monoLo"`     // Monotonic clock safe lower bound (safe time to resume generating).
+	MonoOffset int64  `json:"monoOffset"` //
+	Drifts     uint32 `json:"drifts"`     // Count of wall clock regressions the generator tick-tocked at.
 }
 
 // SequenceOverflowNotification contains information pertaining to the current state of a Generator
@@ -40,84 +41,97 @@ type Generator struct {
 type SequenceOverflowNotification struct {
 	Now   time.Time // Time of tick.
 	Count uint32    // Number of currently overflowing generation calls.
-	Ticks uint32    // For how many ticks in total we've already been dealing with the *current* overflow.
+	Ticks uint32    // Total count of ticks while dealing with the *current* overflow.
 }
 
-// GeneratorSnapshot represents the internal bookkeeping data of a Generator at some point in time.
-type GeneratorSnapshot struct {
-	Partition   Partition `json:"partition"`
-	Sequence    uint16    `json:"sequence"`
-	SequenceMin uint16    `json:"sequenceMin"`
-	SequenceMax uint16    `json:"sequenceMax"`
+// Generator is responsible for generating new IDs scoped to a given fixed Partition and
+// managing their sequence.
+type Generator struct {
+	partition Partition // Immutable, assigned at object creation.
 
-	// All fields are exported leaving you full control, but if you manually set any of the below
-	// and use them to seed a generator, you should know exactly what you're doing.
-	Drifts     uint32 `json:"drifts"`
-	Now        int64  `json:"now"`
-	WallHi     int64  `json:"wallHi"`
-	MonoHi     int64  `json:"monoHi"`
-	MonoOffset int64  `json:"monoOffset"`
+	drifts     *uint32     // Uses only the LSB for the tick-tock but serves as a counter as well.
+	wallHi     *int64      // Highest recorded wall time.
+	monoLo     *int64      //
+	monoOffset int64       // Immutable, assigned at object creation.
+	regression *sync.Mutex // Lock for regression branch.
+
+	seq       *uint32 // Uses only the low 16-bits.
+	seqMin    uint32  // Immutable, assigned at object creation.
+	seqMax    uint32  // Immutable, assigned at object creation.
+	seqStatic *uint32 // See documentation of NewWithTime. Not included in snapshots (does not get restored).
+
+	seqOverflowCond   *sync.Cond
+	seqOverflowTicker *time.Ticker
+	seqOverflowCount  uint32 // Behind seqOverflowCond lock.
+	seqOverflowChan   chan<- *SequenceOverflowNotification
 }
 
 // NewGenerator returns a new generator based on the optional Snapshot.
 func NewGenerator(snapshot *GeneratorSnapshot, c chan<- *SequenceOverflowNotification) (*Generator, error) {
-	if snapshot == nil {
-		var (
-			err error
-			p   Partition
-		)
-
-		if p, err = genPartition(); err != nil {
-			return nil, err
-		}
-
-		return &Generator{
-			partition:       p,
-			seq:             new(uint32),
-			seqMin:          0,
-			seqMax:          MaxSequence,
-			seqOverflowCond: sync.NewCond(&sync.Mutex{}),
-			seqOverflowChan: c,
-			drifts:          new(uint32),
-			wallHi:          new(int64),
-			monoHi:          new(int64),
-			regression:      &sync.Mutex{},
-		}, nil
+	if snapshot != nil {
+		return newGeneratorFromSnapshot(*snapshot, c)
 	}
 
-	snap := *snapshot
+	return newGeneratorFromDefaults(c)
+}
+
+func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOverflowNotification) (*Generator, error) {
+	if err := sanitizeSnapshotBounds(&snapshot); err != nil {
+		return nil, err
+	}
 
 	// We do a very rudimentary comparison on the wall clocks.
 	// snapshot.MonoOffset gets sampled along with snapshot.Now. We apply the difference in wall clock times
 	// as if monotonic time also changed. If wallNow is behind snapshot.Now, we effectively extend the time it
-	// takes until we reach a new safe boundary (monoHi). Otherwise we decrease it, simply adding passed time.
-	if snap.Now != 0 {
+	// takes until we reach a new safe boundary (monoLo). Otherwise we decrease it, simply adding passed time.
+	if snapshot.Now != 0 {
 		wallNow, monoNow := nanotime()
-		snap.MonoOffset += wallNow - snap.Now - monoNow
-		snap.MonoHi -= monoNow
-	}
-
-	if err := sanitizeSnapshotBounds(&snap); err != nil {
-		return nil, err
+		snapshot.MonoOffset += wallNow - snapshot.Now - monoNow
+		snapshot.MonoLo -= monoNow
 	}
 
 	// We use only the low 16 bits, but sync (@go 1.12) has no exported atomic call for that
-	// (and impl would require porting it to all architectures). At the same time don't want to give
-	// the impression that seq is higher than it actually is via a exported type like the snapshots,
-	// which is why they're shot as uint16.
-	seq := uint32(snap.Sequence)
+	// (and impl would require porting it to all architectures).
+	seq := uint32(snapshot.Sequence)
+	seqStatic := uint32(snapshot.SequenceMin)
 
 	return &Generator{
-		partition:       snap.Partition,
+		partition:       snapshot.Partition,
 		seq:             &seq,
-		seqMin:          uint32(snap.SequenceMin),
-		seqMax:          uint32(snap.SequenceMax),
+		seqMin:          uint32(snapshot.SequenceMin),
+		seqMax:          uint32(snapshot.SequenceMax),
+		seqStatic:       &seqStatic,
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
 		seqOverflowChan: c,
-		drifts:          &snap.Drifts,
-		wallHi:          &snap.WallHi,
-		monoHi:          &snap.MonoHi,
-		monoOffset:      snap.MonoOffset,
+		drifts:          &snapshot.Drifts,
+		wallHi:          &snapshot.WallHi,
+		monoLo:          &snapshot.MonoLo,
+		monoOffset:      snapshot.MonoOffset,
+		regression:      &sync.Mutex{},
+	}, nil
+}
+
+func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generator, error) {
+	var (
+		err error
+		p   Partition
+	)
+
+	if p, err = genPartition(); err != nil {
+		return nil, err
+	}
+
+	return &Generator{
+		partition:       p,
+		seq:             new(uint32),
+		seqMin:          0,
+		seqMax:          MaxSequence,
+		seqStatic:       new(uint32),
+		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
+		seqOverflowChan: c,
+		drifts:          new(uint32),
+		wallHi:          new(int64),
+		monoLo:          new(int64),
 		regression:      &sync.Mutex{},
 	}, nil
 }
@@ -133,19 +147,15 @@ func (g *Generator) New(meta byte) (id ID) {
 		wallNow, monoNow = nanotime()
 	)
 
+	// Fastest branch if we're still in the same timeframe.
 	if wallHi == wallNow {
-		// Fastest branch if we're still in the same timeframe.
 		seq := atomic.AddUint32(g.seq, 1)
 
-		// Upper bound is inclusive.
 		if g.seqMax >= seq {
-			g.setTimestamp(&id, wallNow)
-			g.setPartition(&id, meta)
-
-			id[4] |= byte(atomic.LoadUint32(g.drifts) & 1)
-
-			id[8] = byte(seq >> 8)
-			id[9] = byte(seq)
+			g.applyTimestamp(&id, wallNow)
+			g.applyTickTock(&id, atomic.LoadUint32(g.drifts))
+			g.applyPartition(&id, meta)
+			g.applySequence(&id, seq)
 
 			return
 		}
@@ -190,15 +200,10 @@ func (g *Generator) New(meta byte) (id ID) {
 	if wallNow > wallHi && atomic.CompareAndSwapInt64(g.wallHi, wallHi, wallNow) {
 		atomic.StoreUint32(g.seq, g.seqMin)
 
-		g.setTimestamp(&id, wallNow)
-		g.setPartition(&id, meta)
-
-		id[4] |= byte(atomic.LoadUint32(g.drifts) & 1)
-
-		if g.seqMin > 0 {
-			id[8] = byte(g.seqMin >> 8)
-			id[9] = byte(g.seqMin)
-		}
+		g.applyTimestamp(&id, wallNow)
+		g.applyTickTock(&id, atomic.LoadUint32(g.drifts))
+		g.applyPartition(&id, meta)
+		g.applySequence(&id, g.seqMin)
 
 		return
 	}
@@ -207,11 +212,6 @@ func (g *Generator) New(meta byte) (id ID) {
 	g.regression.Lock()
 
 	// Check-again. It's possible that another thread applied the drift while we were spinning (if we were).
-	// This way we're avoiding a lock in the fast path outside. This is also the most likely path
-	// when a drift happens and a routine happens to do the first check, then lock, before we apply the tick-tock.
-	// The edge case is when when the tick-tock does not get applied, e.g. we had more than one time regression
-	// before reaching g.hiMono again, in which case this routine will end up sleeping until it's safe
-	// to generate again.
 	if wallHi = atomic.LoadInt64(g.wallHi); wallNow >= wallHi {
 		g.regression.Unlock()
 
@@ -219,69 +219,74 @@ func (g *Generator) New(meta byte) (id ID) {
 	}
 
 	monoNow += g.monoOffset
-	monoHi := *g.monoHi // Safe, only write that ever happens to monoHi is inside this branch and we're in a mutex.
+	monoLo := *g.monoLo // Safe, only write that ever happens to monoLo is inside this branch and we're locked.
 
-	if monoNow > monoHi {
+	if monoNow > monoLo {
 		// Branch for the one routine that gets to apply the drift.
 		// wallHi - wallNow represents the size of the drift in wall clock time. We need to readjust
 		// back from 4msecs to nanoseconds since that's how our mono clock is running.
 		driftNsecs := (wallHi - wallNow) * TimeUnit
 
-		// monoHi becomes a moment in the future of the monotonic clock.
+		// monoLo becomes a moment in the future of the monotonic clock.
 		// Sequence gets reset on drifts as time changed. Every other contender is in a branch
 		// that ends in a rerun so they'll pick up all the changes.
-		atomic.StoreInt64(g.monoHi, monoNow+driftNsecs)
+		atomic.StoreInt64(g.monoLo, monoNow+driftNsecs)
 		atomic.StoreInt64(g.wallHi, wallNow)
 		atomic.StoreUint32(g.seq, g.seqMin)
 
-		g.setTimestamp(&id, wallNow)
-		g.setPartition(&id, meta)
-
-		id[4] |= byte(atomic.AddUint32(g.drifts, 1) & 1)
-
-		if g.seqMin > 0 {
-			id[8] = byte(g.seqMin >> 8)
-			id[9] = byte(g.seqMin)
-		}
+		g.applyTimestamp(&id, wallNow)
+		g.applyTickTock(&id, atomic.AddUint32(g.drifts, 1))
+		g.applyPartition(&id, meta)
+		g.applySequence(&id, g.seqMin)
 
 		g.regression.Unlock()
 
 		return id
 	}
 
-	// Branch for all routines that are in an "unsafe" past. After sleeping, we retry from scratch
-	// as we could've moved backwards in time *again* during our slumber.
-	//
-	// TODO(alcore) Up for a bench and profile. Not only is there likely a better way to do this
-	// than to put all contenders to sleep, intuition also says this needs profiling under extreme
-	// contention to check behaviour when all goroutines get woken up - and to see whether we starve
-	// anything out. Arbitrarily splitting between spinning on a mutex on short drifts (define short?)
-	// and actually going to sleep to let the runtime and OS handle the resources during long drifts,
-	// would be an option.
+	// Branch for all routines that are in an "unsafe" past (e.g. multiple time regressions happened
+	// before we reached monoLo again). After sleeping, we retry from scratch as we could've moved
+	// backwards in time *again*  during our slumber.
 	g.regression.Unlock()
 
-	time.Sleep(time.Duration(monoHi - monoNow))
+	time.Sleep(time.Duration(monoLo - monoNow))
 
 	return g.New(meta)
 }
 
 // NewWithTime generates a new ID using the given time for the timestamp.
 //
-// IDs generated with user-specified timestamps are exempt from the tick-tock mechanism (but retain
-// the same data layout). Managing potential collisions in their case is left to the user. This utility
-// is primarily meant to enable porting of old IDs to sno and assumed to be ran before an ID scheme goes
-// online.
-func (g *Generator) NewWithTime(meta byte, t time.Time) ID {
-	var id ID
-	g.setTimestamp(&id, (epochNsec+t.UnixNano())/TimeUnit)
-	g.setPartition(&id, meta)
+// IDs generated with user-specified timestamps are exempt from the tick-tock mechanism and
+// use a sequence separate from New() - one that is independent from time, as time provided to
+// this method can be arbitrary. The sequence increases strictly monotonically up to hitting
+// the generator's SequenceMax, after which it rolls over silently back to SequenceMin.
+//
+// That means bounds are respected, but unlike New(), NewWithTime() will not block the caller
+// when the (separate) sequence rolls over as the Generator would be unable to determine when
+// to resume processing within the constraints of this method.
+//
+// Managing potential collisions due to the arbitrary time is left to the user.
+//
+// This utility is primarily meant to enable porting of old IDs to sno and assumed to be ran
+// before an ID scheme goes online.
+func (g *Generator) NewWithTime(meta byte, t time.Time) (id ID) {
+	var seq = atomic.AddUint32(g.seqStatic, 1)
 
-	// TODO(alcore) Decouple from time-relative sequence?
-	seq := atomic.AddUint32(g.seq, 1)
-	id[8] = byte(seq >> 8)
-	id[9] = byte(seq)
+	if seq > g.seqMax {
+		// If the CAS failS, another thread applied the reset in the meantime so we
+		// need to retry from scratch to pick up the update.
+		if !atomic.CompareAndSwapUint32(g.seqStatic, seq, g.seqMin) {
+			return g.NewWithTime(meta, t)
+		}
 
-	return id
+		seq = g.seqMin
+	}
+
+	g.applyTimestamp(&id, (epochNsec+t.UnixNano())/TimeUnit)
+	g.applyPartition(&id, meta)
+	g.applySequence(&id, seq)
+
+	return
 }
 
 // Partition returns the fixed identifier of the Generator.
@@ -290,11 +295,63 @@ func (g *Generator) Partition() Partition {
 }
 
 // Sequence returns the current sequence the Generator is at.
-func (g *Generator) Sequence() uint16 {
-	return uint16(atomic.LoadUint32(g.seq))
+//
+// This does *not* mean that if one were to call New() right now, the generated ID
+// will necessarily get this sequence, as other things may happen before.
+//
+// If the next call to New() would result in a reset of the sequence, SequenceMin
+// is returned instead of the current internal sequence.
+//
+// If the generator is currently overflowing, the sequence returned will be higher than
+// the generator's SequenceMax (thus a uint32 return type), meaning it can be used to
+// determine the current overflow via:
+//	overflow := int(uint32(generator.SequenceMax()) - generator.Sequence())
+func (g *Generator) Sequence() uint32 {
+	// Determine whether current sequence would apply to the next call to New() or
+	// whether it'd get reset to g.seqMin (either higher time or a regression).
+	if wallNow, _ := nanotime(); wallNow == atomic.LoadInt64(g.wallHi) {
+		return atomic.LoadUint32(g.seq)
+	}
+
+	return g.seqMin
 }
 
-// Snapshot returns a snapshot of the Generator's current bookkeeping data.
+// SequenceMin returns the lower bound of the sequence pool of this generator.
+func (g *Generator) SequenceMin() uint16 {
+	return uint16(g.seqMin)
+}
+
+// SequenceMax returns the upper bound of the sequence pool of this generator.
+func (g *Generator) SequenceMax() uint16 {
+	return uint16(g.seqMax)
+}
+
+// Len returns the number of IDs generated in the current timeframe.
+func (g *Generator) Len() int {
+	if wallNow, _ := nanotime(); wallNow == atomic.LoadInt64(g.wallHi) {
+		if seq := atomic.LoadUint32(g.seq); g.seqMax > seq {
+			return int(seq-g.seqMin) + 1
+		}
+
+		return g.Cap()
+	}
+
+	return 0
+}
+
+// Cap returns the total capacity of the Generator.
+//
+// To get its current capacity (e.g. number of possible additional IDs in the current
+// timeframe), simply:
+// 	spare := generator.Cap() - generator.Len()
+// The result will always be non-negative.
+func (g *Generator) Cap() int {
+	// Will always be non-negative, but is cast to an int to signal the properties of Sequence()
+	// in that Cap() - Sequence() can be negative.
+	return int(g.seqMax-g.seqMin) + 1
+}
+
+// Snapshot returns a copy of the Generator's current bookkeeping data.
 func (g *Generator) Snapshot() GeneratorSnapshot {
 	wallNow, _ := nanotime()
 
@@ -303,15 +360,15 @@ func (g *Generator) Snapshot() GeneratorSnapshot {
 		Partition:   g.partition,
 		Drifts:      atomic.LoadUint32(g.drifts),
 		WallHi:      atomic.LoadInt64(g.wallHi),
-		MonoHi:      atomic.LoadInt64(g.monoHi),
+		MonoLo:      atomic.LoadInt64(g.monoLo),
 		MonoOffset:  g.monoOffset,
-		Sequence:    uint16(atomic.LoadUint32(g.seq)),
+		Sequence:    atomic.LoadUint32(g.seq),
 		SequenceMin: uint16(g.seqMin),
 		SequenceMax: uint16(g.seqMax),
 	}
 }
 
-func (g *Generator) setTimestamp(id *ID, units int64) {
+func (g *Generator) applyTimestamp(id *ID, units int64) {
 	// Entire timestamp is shifted left by one to make room for the tick-toggle at the LSB.
 	// Note that we get the time from New() already as our own time units and in our epoch.
 	id[0] = byte(units >> 31)
@@ -321,10 +378,19 @@ func (g *Generator) setTimestamp(id *ID, units int64) {
 	id[4] = byte(units << 1)
 }
 
-func (g *Generator) setPartition(id *ID, meta byte) {
+func (g *Generator) applyTickTock(id *ID, counter uint32) {
+	id[4] |= byte(counter & 1)
+}
+
+func (g *Generator) applyPartition(id *ID, meta byte) {
 	id[5] = meta
 	id[6] = g.partition[0]
 	id[7] = g.partition[1]
+}
+
+func (g *Generator) applySequence(id *ID, seq uint32) {
+	id[8] = byte(seq >> 8)
+	id[9] = byte(seq)
 }
 
 func (g *Generator) seqOverflowLoop() {
@@ -397,7 +463,7 @@ func (g *Generator) seqOverflowLoop() {
 
 func genPartition() (p Partition, err error) {
 	if _, err := rand.Read(p[:]); err != nil {
-		return p, fmt.Errorf("failed to generate a random partition: %v", err)
+		return p, fmt.Errorf("sno: failed to generate a random partition: %v", err)
 	}
 
 	return
@@ -411,42 +477,35 @@ func sanitizeSnapshotBounds(s *GeneratorSnapshot) error {
 	}
 
 	if s.SequenceMin == s.SequenceMax {
-		return &InvalidGeneratorBoundsError{
-			Cur: s.Sequence,
-			Min: s.SequenceMin,
-			Max: s.SequenceMax,
-			msg: "sequence bounds are identical - cannot create a generator with no sequence pool",
-		}
+		return invalidSequenceBounds(s, errSequenceBoundsIdenticalMsg)
 	}
 
-	// Allow bounds to be given in any order since we can work with either as long as they
-	// meet all the other requirements.
+	// Allow bounds to be given in any order.
 	if s.SequenceMax < s.SequenceMin {
 		s.SequenceMin, s.SequenceMax = s.SequenceMax, s.SequenceMin
 	}
 
 	if s.SequenceMax-s.SequenceMin < minSequencePoolSize {
-		return &InvalidGeneratorBoundsError{
-			Cur: s.Sequence,
-			Min: s.SequenceMin,
-			Max: s.SequenceMax,
-			msg: "a generator requires a sequence pool with a capacity of at least 16",
-		}
+		return invalidSequenceBounds(s, errSequencePoolTooSmallMsg)
 	}
 
 	// Allow zero value to pass as a default of the lower bound.
 	if s.Sequence == 0 {
-		s.Sequence = s.SequenceMin
+		s.Sequence = uint32(s.SequenceMin)
 	}
 
-	if s.Sequence > s.SequenceMax || s.Sequence < s.SequenceMin {
-		return &InvalidGeneratorBoundsError{
-			Cur: s.Sequence,
-			Min: s.SequenceMin,
-			Max: s.SequenceMax,
-			msg: "current sequence overflows bounds",
-		}
+	if s.Sequence < uint32(s.SequenceMin) {
+		return invalidSequenceBounds(s, errSequenceUnderflowsBound)
 	}
 
 	return nil
+}
+
+func invalidSequenceBounds(s *GeneratorSnapshot, msg string) *InvalidSequenceBoundsError {
+	return &InvalidSequenceBoundsError{
+		Cur: s.Sequence,
+		Min: s.SequenceMin,
+		Max: s.SequenceMax,
+		Msg: msg,
+	}
 }

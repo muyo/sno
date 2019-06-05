@@ -2,6 +2,7 @@ package sno
 
 import (
 	"bytes"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,6 +87,22 @@ func TestID_String(t *testing.T) {
 	}
 }
 
+func TestID_Bytes(t *testing.T) {
+	src := ID{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}
+	expected := make([]byte, SizeBinary)
+	copy(expected, src[:])
+
+	actual := src.Bytes()
+	if !bytes.Equal(actual, expected) {
+		t.Errorf("expected [%s], got [%s]", expected, actual)
+	}
+
+	actual[SizeBinary-1]++
+	if bytes.Equal(expected, actual) {
+		t.Error("returned a reference to underlying array")
+	}
+}
+
 func TestID_MarshalText(t *testing.T) {
 	src := ID{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}
 	expected := []byte("brpk4q72xwf2m63l")
@@ -117,8 +134,8 @@ func TestID_UnmarshalText_Invalid(t *testing.T) {
 	id := ID{}
 	err := id.UnmarshalText([]byte("012brpk4q72xwf2m63l1245453gfdgxz"))
 
-	if err != errInvalidID {
-		t.Errorf("expected error [%s], got [%s]", errInvalidID, err)
+	if err != errInvalidDataSize {
+		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
 	}
 }
 
@@ -166,8 +183,8 @@ func TestID_UnmarshalJSON_Invalid(t *testing.T) {
 	id := ID{}
 	err := id.UnmarshalJSON([]byte("\"012brpk4q72xwf2m63l1245453gfdgxz\""))
 
-	if err != errInvalidID {
-		t.Errorf("expected error [%s], got [%s]", errInvalidID, err)
+	if err != errInvalidDataSize {
+		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
 	}
 }
 
@@ -185,7 +202,7 @@ func TestID_UnmarshalJSON_Null(t *testing.T) {
 }
 
 func TestID_IsZero(t *testing.T) {
-	cases := []struct {
+	for _, c := range []struct {
 		name string
 		id   ID
 		want bool
@@ -198,11 +215,93 @@ func TestID_IsZero(t *testing.T) {
 			id:   ID{},
 			want: true,
 		},
-	}
-
-	for _, c := range cases {
+	} {
 		if actual, expected := c.id.IsZero(), c.want; actual != expected {
 			t.Errorf("expected [%v], got [%v]", expected, actual)
 		}
+	}
+}
+
+func TestID_Compare(t *testing.T) {
+	a := New(255)
+	l := a
+	l[9]++
+	e := a
+	b := a
+	b[9]--
+
+	if actual := a.Compare(l); actual != -1 {
+		t.Errorf("expected [-1], got [%d]", actual)
+	}
+
+	if actual := a.Compare(e); actual != 0 {
+		t.Errorf("expected [0], got [%d]", actual)
+	}
+
+	if actual := a.Compare(b); actual != 1 {
+		t.Errorf("expected [1], got [%d]", actual)
+	}
+}
+
+func TestID_Value(t *testing.T) {
+	src := ID{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}
+	expected := make([]byte, SizeBinary)
+	copy(expected, src[:])
+
+	v, err := src.Value()
+	if err != nil {
+		t.Errorf("got unexpected error: %s", err)
+	}
+
+	actual, ok := v.([]byte)
+	if !ok {
+		t.Errorf("expected type [%T], got [%T]", expected, actual)
+	}
+
+	if !bytes.Equal(actual, expected) {
+		t.Errorf("expected [%s], got [%s]", expected, actual)
+	}
+
+	actual[SizeBinary-1]++
+	if bytes.Equal(expected, actual) {
+		t.Error("returned a reference to underlying array")
+	}
+}
+
+func TestID_Scan(t *testing.T) {
+	id := New(255)
+
+	for _, c := range []struct {
+		name string
+		in   interface{}
+		out  ID
+		err  error
+	}{
+		{"nil", nil, ID{}, nil},
+		{"bytes-valid", id[:], id, nil},
+		{"bytes-invalid", make([]byte, 3), zero, errInvalidDataSize},
+		{"bytes-zero", []byte{}, zero, nil},
+		{"string-valid", id.String(), id, nil},
+		{"string-invalid", "123", zero, errInvalidDataSize},
+		{"string-zero", "", zero, nil},
+		{"invalid", 69, ID{}, &InvalidTypeError{}},
+	} {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			var out ID
+			err := out.Scan(c.in)
+
+			if actual, expected := out, c.out; actual != expected {
+				t.Errorf("expected [%s], got [%s]", expected, actual)
+			}
+
+			if err != nil && c.err == nil {
+				t.Errorf("got unexpected error: %s", err)
+			} else if actual, expected := reflect.TypeOf(err), reflect.TypeOf(c.err); actual != expected {
+				t.Errorf("expected error type [%s], got [%s]", expected, actual)
+			}
+		})
 	}
 }

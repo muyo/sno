@@ -25,8 +25,8 @@ const (
 	// As bounds can be set individually - this is the upper cap.
 	MaxSequence = 1<<16 - 1
 
-	// Arbitrary min pool size of 16 per time unit (that is 4000 per sec).
-	minSequencePoolSize = 16
+	// Arbitrary min pool size of 4 per time unit (that is 1000 per sec).
+	minSequencePoolSize = 4
 
 	tickRate    = TimeUnit / tickRateDiv
 	tickRateDiv = timeUnitStep

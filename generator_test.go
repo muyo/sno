@@ -4,9 +4,8 @@ import (
 	"testing"
 )
 
-// TODO(alcore) Needs deterministic cases for, amongst others:
-// - Generation with overflowing the sequence pool;
-// - Monotonic order guarantees when not overflowing;
+// TODO(alcore) Needs deterministic time source to cover, amongst others:
+// - Monotonic order guarantees when not overflowing.
 // - Simulated clock regression and multi-regression.
 // - Restoration from snapshot taken prior to a regression.
 func TestGenerator_NewNoOverflow(t *testing.T) {
@@ -22,10 +21,8 @@ func TestGenerator_NewNoOverflow(t *testing.T) {
 		}, nil)
 	)
 
-	// Must not fail.
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	ids := make([]ID, sampleSize)
@@ -70,10 +67,8 @@ func TestGenerator_NewOverflows(t *testing.T) {
 		}, nil)
 	)
 
-	// Must not fail.
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	ids := make([]ID, sampleSize)
@@ -130,10 +125,8 @@ func TestGenerator_Partition(t *testing.T) {
 	g, err := NewGenerator(&GeneratorSnapshot{
 		Partition: expected,
 	}, nil)
-	// Must not fail.
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	actual := g.Partition()
@@ -142,17 +135,86 @@ func TestGenerator_Partition(t *testing.T) {
 	}
 }
 
-func TestGenerator_Sequence_Single(t *testing.T) {
-	// TODO(alcore) Swap out time source for a deterministic one to guarantee
-	// we don't hit a time frame increase inbetween.
-	g, err := NewGenerator(nil, nil)
-	// Must not fail.
+func TestGenerator_SequenceBounds(t *testing.T) {
+	min := uint16(1024)
+	max := uint16(2047)
+	g, err := NewGenerator(&GeneratorSnapshot{
+		SequenceMin: min,
+		SequenceMax: max,
+	}, nil)
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
-	expected0 := uint16(0)
+	if actual, expected := g.SequenceMin(), min; actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+
+	if actual, expected := g.SequenceMax(), max; actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+
+	if actual, expected := g.Cap(), int(max-min)+1; actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+
+	if actual, expected := g.Len(), 0; actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+
+	for i := 0; i < 5; i++ {
+		g.New(255)
+	}
+
+	if actual, expected := g.Len(), 5; actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: 8,
+		SequenceMax: 16,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate an overflow. All IDs over Cap() must be generated in a subsequent timeframe
+	// meaning Len will reflect the count in the last frame.
+	// TODO(alcore) This *can* occasionally fail as we are not using a deterministic time source,
+	// meaning first batch can get split up if time changes during the test and then end up
+	// spilling into the Len() we test for.
+	for i := 0; i < g.Cap()+7; i++ {
+		g.New(255)
+	}
+
+	if actual, expected := g.Len(), 7; actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: 8,
+		SequenceMax: 16,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < g.Cap(); i++ {
+		g.New(255)
+	}
+
+	if actual, expected := g.Len(), g.Cap(); actual != expected {
+		t.Errorf("expected [%d], got [%d]", expected, actual)
+	}
+}
+
+func TestGenerator_Sequence_Single(t *testing.T) {
+	g, err := NewGenerator(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected0 := uint32(0)
 	expected1 := expected0
 	expected2 := expected1 + 1
 	actual0 := g.Sequence()
@@ -173,16 +235,12 @@ func TestGenerator_Sequence_Single(t *testing.T) {
 }
 
 func TestGenerator_Sequence_Batch(t *testing.T) {
-	// TODO(alcore) Swap out time source for a deterministic one to guarantee
-	// we don't hit a time frame increase inbetween.
 	g, err := NewGenerator(nil, nil)
-	// Must not fail.
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
-	expected := uint16(9)
+	expected := uint32(9)
 	for i := 0; i <= int(expected); i++ {
 		_ = g.New(255)
 	}
@@ -194,17 +252,13 @@ func TestGenerator_Sequence_Batch(t *testing.T) {
 }
 
 func TestGenerator_Sequence_FromSnapshot(t *testing.T) {
-	// TODO(alcore) Swap out time source for a deterministic one to guarantee
-	// we don't hit a time frame increase inbetween.
-	seq := uint16(1024)
+	seq := uint32(1024)
 	g, err := NewGenerator(&GeneratorSnapshot{
-		SequenceMin: seq,
+		SequenceMin: uint16(seq),
 		Sequence:    seq,
 	}, nil)
-	// Must not fail.
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
 	expected1 := seq
