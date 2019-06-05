@@ -1,27 +1,33 @@
+// +build !amd64
+
 package sno
 
 const (
+	// The encoding is a custom base32 variant stemming from base32hex.
+	// The alphabet is 2 contiguous ASCII ranges: `50..57` (digits) and `97..120` (lowercase letters).
+	// A canonically encoded ID can be validated with a regexp of `[2-9a-x]{16}`.
 	encoding = "23456789abcdefghijklmnopqrstuvwx"
 )
 
 var (
-	// Decoding LUT. We declare this as a pointer to avoid allocating a 256-byte
-	// all-zero table that we might not need at all (vide init.go).
-	dec *[256]byte
+	// Decoding LUT.
+	decoding [256]byte
 
-	// encode and decode are the actual codec functions used on a package level.
-	// On platforms that have vectorized codecs those will be assigned to the ASM
-	// implementations. Everywhere else init.go will assign encodeScalar and decodeScalar
-	// respectively as fallbacks. Function pointers have a slight overhead but not notable
-	// enough to care in this case.
-	encode func(src *ID) [SizeEncoded]byte
-	decode func(dst *ID, src []byte)
+	// Dummy flag to be set by the appropriate build (used by tests).
+	hasVectorSupport bool
 )
 
-func encodeScalar(src *ID) [SizeEncoded]byte {
-	var dst [SizeEncoded]byte
+func init() {
+	for i := 0; i < len(decoding); i++ {
+		decoding[i] = 0xFF
+	}
 
-	dst[15] = encoding[src[9]&0x1F]
+	for i := 0; i < len(encoding); i++ {
+		decoding[encoding[i]] = byte(i)
+	}
+}
+
+func encode(src *ID) (dst [SizeEncoded]byte) {
 	dst[14] = encoding[(src[9]>>5|src[8]<<3)&0x1F]
 	dst[13] = encoding[src[8]>>2&0x1F]
 	dst[12] = encoding[(src[8]>>7|src[7]<<1)&0x1F]
@@ -39,21 +45,23 @@ func encodeScalar(src *ID) [SizeEncoded]byte {
 	dst[1] = encoding[(src[1]>>6|src[0]<<2)&0x1F]
 	dst[0] = encoding[src[0]>>3]
 
-	return dst
+	return
 }
 
-func decodeScalar(dst *ID, src []byte) {
+func decode(src []byte) (dst ID) {
 	_ = src[15] // BCE hint.
 
-	dst[9] = dec[src[14]]<<5 | dec[src[15]]
-	dst[8] = dec[src[12]]<<7 | dec[src[13]]<<2 | dec[src[14]]>>3
-	dst[7] = dec[src[11]]<<4 | dec[src[12]]>>1
-	dst[6] = dec[src[9]]<<6 | dec[src[10]]<<1 | dec[src[11]]>>4
-	dst[5] = dec[src[8]]<<3 | dec[src[9]]>>2
+	dst[9] = decoding[src[14]]<<5 | decoding[src[15]]
+	dst[8] = decoding[src[12]]<<7 | decoding[src[13]]<<2 | decoding[src[14]]>>3
+	dst[7] = decoding[src[11]]<<4 | decoding[src[12]]>>1
+	dst[6] = decoding[src[9]]<<6 | decoding[src[10]]<<1 | decoding[src[11]]>>4
+	dst[5] = decoding[src[8]]<<3 | decoding[src[9]]>>2
 
-	dst[4] = dec[src[6]]<<5 | dec[src[7]]
-	dst[3] = dec[src[4]]<<7 | dec[src[5]]<<2 | dec[src[6]]>>3
-	dst[2] = dec[src[3]]<<4 | dec[src[4]]>>1
-	dst[1] = dec[src[1]]<<6 | dec[src[2]]<<1 | dec[src[3]]>>4
-	dst[0] = dec[src[0]]<<3 | dec[src[1]]>>2
+	dst[4] = decoding[src[6]]<<5 | decoding[src[7]]
+	dst[3] = decoding[src[4]]<<7 | decoding[src[5]]<<2 | decoding[src[6]]>>3
+	dst[2] = decoding[src[3]]<<4 | decoding[src[4]]>>1
+	dst[1] = decoding[src[1]]<<6 | decoding[src[2]]<<1 | decoding[src[3]]>>4
+	dst[0] = decoding[src[0]]<<3 | decoding[src[1]]>>2
+
+	return
 }
