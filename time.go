@@ -6,10 +6,8 @@ import (
 
 const (
 	// Epoch is the offset to the Unix epoch, in seconds, that ID timestamps are embedded with.
-	// Canonically this includes a sign offset.
 	// 1262304000 is 2010-01-01 00:00:00 UTC
-	// 2147483647 is the sign offset
-	Epoch     = 1262304000 - 2147483647
+	Epoch     = 1262304000
 	epochMsec = Epoch * 1e3
 	epochNsec = Epoch * 1e9
 
@@ -18,7 +16,7 @@ const (
 	timeUnitStep = 4
 
 	// MaxTimestamp is the max number of time units that can be embedded in an ID's timestamp.
-	// Corresponds to 2067-09-25 19:01:42.548 UTC in our custom epoch.
+	// Corresponds to 2079-09-07 15:47:35.548 UTC in our custom epoch.
 	MaxTimestamp = 1<<39 - 1
 
 	// MaxSequence is the max sequence number supported by generators.
@@ -40,7 +38,7 @@ func now() (sec int64, nsec int32, mono int64)
 func nanotime() (wall int64, mono int64) {
 	var (
 		wallNowSec, wallNowNsec, monoNow = now()
-		wallnow                          = (epochNsec + wallNowSec*1e9 + int64(wallNowNsec)) / TimeUnit
+		wallnow                          = (wallNowSec*1e9 + int64(wallNowNsec) - epochNsec) / TimeUnit
 	)
 
 	return wallnow, monoNow

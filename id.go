@@ -15,7 +15,7 @@ const (
 	SizeEncoded = 16
 )
 
-// ID is the binary representation of an ID.
+// ID is the binary representation of a sno ID.
 //
 // It is comprised of 10 bytes in 2 blocks of 40 bits, with its components stored in big-endian order.
 //
@@ -38,7 +38,7 @@ func (id ID) Time() time.Time {
 	msecs |= int64(id[3]) << 7
 	msecs |= int64(id[4]) >> 1
 
-	s := msecs/250 - Epoch
+	s := msecs/250 + Epoch
 	ns := (msecs % 250) * TimeUnit
 
 	return time.Unix(s, ns)
@@ -52,7 +52,7 @@ func (id ID) Timestamp() int64 {
 	msecs |= int64(id[3]) << 7
 	msecs |= int64(id[4]) >> 1
 
-	return msecs*4 - epochMsec
+	return msecs*4 + epochMsec
 }
 
 // Meta returns the metabyte of the ID.
@@ -90,7 +90,7 @@ func (id ID) Bytes() []byte {
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler by returning the ID as a byte slice.
-func (id *ID) MarshalBinary() ([]byte, error) {
+func (id ID) MarshalBinary() ([]byte, error) {
 	return id[:], nil
 }
 
@@ -192,8 +192,7 @@ func (id ID) Compare(that ID) int {
 //	type stringedID sno.ID
 //
 //	func (id stringedID) Value() (driver.Value, error) {
-//		i := sno.ID(id)
-//		return i.String(), nil
+//		return sno.ID(id).String(), nil
 //	}
 //
 //	// ... and use it via:

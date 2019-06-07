@@ -6,7 +6,7 @@ var (
 	errInvalidDataSize = &InvalidDataSizeError{}
 )
 
-// InvalidDataSize gets returned when attempting to unmarshal or decode an ID from data that
+// InvalidDataSizeError gets returned when attempting to unmarshal or decode an ID from data that
 // is not nil and not of a size of: SizeBinary, SizeEncoded nor 0.
 type InvalidDataSizeError struct{}
 
@@ -41,5 +41,5 @@ const (
 )
 
 func (e *InvalidSequenceBoundsError) Error() string {
-	return fmt.Sprintf("sno: %s; current: %d, min: %d, max: %d, pool: %d", e.Msg, e.Cur, e.Min, e.Max, e.Max-e.Min)
+	return fmt.Sprintf("sno: %s; current: %d, min: %d, max: %d, pool: %d", e.Msg, e.Cur, e.Min, e.Max, e.Max-e.Min+1)
 }

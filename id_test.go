@@ -223,12 +223,12 @@ func TestID_IsZero(t *testing.T) {
 }
 
 func TestID_Compare(t *testing.T) {
-	a := New(255)
+	a := New(100)
 	l := a
-	l[9]++
+	l[5]++
 	e := a
 	b := a
-	b[9]--
+	b[5]--
 
 	if actual := a.Compare(l); actual != -1 {
 		t.Errorf("expected [-1], got [%d]", actual)

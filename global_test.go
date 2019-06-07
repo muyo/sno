@@ -74,7 +74,7 @@ func TestGlobal_FromBinaryBytes_Invariant(t *testing.T) {
 }
 
 func TestGlobal_FromBinaryBytes_Invalid(t *testing.T) {
-	cases := []struct {
+	for _, c := range []struct {
 		n       int
 		invalid bool
 	}{
@@ -83,9 +83,7 @@ func TestGlobal_FromBinaryBytes_Invalid(t *testing.T) {
 		{10, false},
 		{12, true},
 		{16, true},
-	}
-
-	for _, c := range cases {
+	} {
 		b := make([]byte, c.n, c.n)
 		_, err := FromBinaryBytes(b)
 

@@ -1,6 +1,7 @@
 <img src="https://i.vgy.me/V4d9td.png" alt="sno logo" title="sno" align="left"  height="200" />
 
-A spec for **unique IDs in distributed systems** based on the Snowflake design, e.g. a coordination-based ID variant. It aims to be friendly to both machines and humans, compact, *versatile* and fast - all at the same time.
+A spec for **unique IDs in distributed systems** based on the Snowflake design, e.g. a coordination-based ID variant. 
+It aims to be friendly to both machines and humans, compact, *versatile* and fast.
 
 This repository contains a **Go** library for generating such IDs. 
 
@@ -18,34 +19,32 @@ go get -u github.com/muyo/sno
 
 ### Features
 
-- **10 bytes** in its binary representation
+- **10 bytes** in its binary representation, canonically **encoded as 16 characters** (➜ [Encoding](#encoding)).
+  <br />The encoding is URL-safe and non-ambiguous. It also happens to be at the binary length of UUIDs - 
+  meaning **sno**s can be stored as UUIDs in your database of choice, if that is preferred.
 - **K-sortable** in either representation
-- Embedded timestamp with a 4msec resolution, bounded within the years 2010 - 2067. Has a simple-but-efficient 
-mechanism to handle clock drifts gracefully (➜ [Time and sequence](#time-and-sequence))
+- Embedded timestamp with a 4msec resolution, bounded within the years 2010 - 2079. Handles time regressions gracefully,
+  without waiting (➜ [Time and sequence](#time-and-sequence))
 - Embedded byte for arbitrary data (➜ [Metabyte](#metabyte))
-- Canonically **encoded as 16 characters** (➜ [Encoding](#encoding)).
-<br />The encoding is URL-safe and non-ambiguous. It also happens to be at the binary length of UUIDs - 
-for those cases when you somehow have a valid reason to store a **sno** as a UUID in your database of choice, 
-instead of in its binary representation. *Yes*, this works.
 - ‭A pool of at minimum **16,384,000** IDs per second:
-<br /> 65,536 guaranteed unique IDs per 4msec frame per partition (‭2 bytes, 65,536 combinations) per metabyte 
-(1 byte, 256 combinations) per tick-tock (1 bit adjustment for clock drifts ➜ [Time and sequence](#time-and-sequence)). 
-16,384,000 is the pool when the metabyte, partition and tick-tock are ignored - **549,755,813,888,000** is the 
-global pool **per second** when they are not.
+<br /> 65,536 guaranteed unique IDs per 4msec per partition (65,536 combinations) per metabyte 
+(256 combinations) per tick-tock (1 bit adjustment for clock drifts ➜ [Time and sequence](#time-and-sequence)). 
+**549,755,813,888,000** is the global pool **per second** when the metabyte, partition and tick-tock are 
+taken into account.
 - Data layout straightforward to inspect or encode/decode (➜ [Layout](#layout))
 - Configuration and coordination optional (➜ [Usage](#usage))
 - Fast, wait-free, safe for concurrent use (➜ [Benchmarks](#benchmarks))
 - Fills a niche (➜ [Alternatives](#alternatives))
-
 
 ### Non-features / cons
 
 - True randomness. **sno**s embed a counter and have **no entropy**. They are not suitable in a context where 
 unpredictability of IDs is a must. They still, however, meet the common requirement of keeping internal counts 
 (e.g. total number of entitites) unguessable and appear obfuscated;
-- Time precision. while *good enough* for many use cases, not quite there for others. There's ways around this 
-limitation, however.
-- It's 10 bytes, not 8. This is suboptimal as far as memory alignment is considered (and platform dependent).
+- Time precision. While *good enough* for many use cases, not quite there for others. The ➜ [Metabyte](#metabyte)
+  can be used to get around this limitation, however.
+- It's 10 bytes, not 8. This is suboptimal as far as memory alignment is considered (platform dependent).
+
 
 <br />
 
@@ -129,11 +128,7 @@ unsigned) and one bit, the LSB of the entire block - for the tick-tock toggle.
 ### Epoch
 
 The **epoch is custom** and **constant**. It is bounded within **2010-01-01 00:00:00 UTC** and 
-**2067-09-25 19:01:42.548 UTC**.
-
-The lower bound is `1262304000` seconds relative to Unix. The canonical offset to canonical Unix, however, is 
-`1262304000 - 2147483647 = -885179647` to account for [overflow](https://en.wikipedia.org/wiki/Year_2038_problem) 
-on platforms which represent the time as signed 32-bit ints.
+**2079-09-07 15:47:35.548 UTC**. The lower bound is `1262304000` seconds relative to Unix. 
 
 If you *really* have to break out of the epoch - or want to store higher precision - the metabyte is your friend.
 
@@ -199,7 +194,7 @@ generator2, err := sno.NewGenerator(&sno.GeneratorSnapshot{
 ```
 
 You will notice that we have simply divided our total pool of 65,536 into 2 even and **non-overlapping** 
-sectors. In the first snapshot, `SequenceMin` could be omitted - and `SequenceMax` in the second, as those are the 
+sectors. In the first snapshot `SequenceMin` could be omitted - and `SequenceMax` in the second, as those are the 
 defaults used when they are not defined. You will get an error when trying to set limits above the capacity of 
 generators, but since the library is oblivious to your setup - it cannot warn you about overlaps and cannot 
 resize on its own either. 
@@ -209,9 +204,9 @@ generators.
 
 It is safe for a range previously used by another generator to be assigned to a different generator under the
 following conditions:
-- it happes in a different timeframe *in the future*, e.g. no sooner than after 4msec have passed (no orchestrator 
-  is fast enough to get a new container online to replace a dead one for this to be a worry),
-- if you can guarantee the new Generator won't regress into a time the previous Generator was running in,
+- it happens in a different timeframe *in the future*, e.g. no sooner than after 4msec have passed (no orchestrator 
+  is fast enough to get a new container online to replace a dead one for this to be a worry);
+- if you can guarantee the new Generator won't regress into a time the previous Generator was running in.
 
 If you create the new Generator using a Snapshot of the former as it went offline, you do not need to worry about those
 conditions and can resume writing to the same range immediately - the obvious tradeoff being the need to coordinate 
@@ -234,26 +229,26 @@ How about...
 
 ```go
 var requestIDGenerator, _ = sno.NewGenerator(&GeneratorSnapshot{
-	SequenceMax: 32767,
+    SequenceMax: 32767,
 }, nil)
 
 type Service byte
 type Call byte
 
 const (
-	UsersSvc   Service = 1
-	UserList   Call    = 1
-	UserCreate Call    = 2
-	UserDelete Call    = 3
+    UsersSvc   Service = 1
+    UserList   Call    = 1
+    UserCreate Call    = 2
+    UserDelete Call    = 3
 )
 
 func genRequestID(svc Service, methodID Call) sno.ID {
-	id := requestIDGenerator.New(byte(svc))
+    id := requestIDGenerator.New(byte(svc))
     // Overwrites the upper byte of the fixed partition. 
     // In our case - we didn't define it but gave a non-nil snapshot, so it is {0, 0}.
-	id[6] = byte(methodID)
+    id[6] = byte(methodID)
 
-	return id
+    return id
 }
 ```
 
@@ -272,27 +267,26 @@ which explains the numbers involved.
 
 The sequence never overflows and the generator is designed with a single-return `New()` method that does not return 
 errors nor invalid IDs. *Realistically* the default generator will never overflow simply because you won't saturate 
-the capacity. Period. Prove the author wrong by submitting a PR about a project of yours that violates this 
-assumption - and enter the hall of fame.
+the capacity.
 
-But since you can set bounds yourself, the capacity could shrink to `16` per 4msec (smallest allowed). 
+But since you can set bounds yourself, the capacity could shrink to `4` per 4msec (smallest allowed). 
 Now that's more likely. So when you start overflowing, the generator will *stall* and *pray* for a 
 reduction in throughput sometime in the near future. 
 
-From **sno**'s persective requesting more IDs than it can give you **immediately** is not an error - but 
+From **sno**'s persective requesting more IDs than it can safely give you **immediately** is not an error - but 
 it *may* require correcting on *your end*. And you should know about that. Therefore, if 
 you want to know when it happens - simply give **sno** a channel along with its configuration snapshot.
 
 When a thread requests an ID and gets stalled, **once** per time unit, you will get a `SequenceOverflowNotification` 
 on that channel.
 
-``go
+```go
 type SequenceOverflowNotification struct {
-	Now   time.Time // Time of tick.
-	Count uint32    // Number of currently overflowing generation calls.
-	Ticks uint32    // For how many ticks in total we've already been dealing with the *current* overflow.
+    Now   time.Time // Time of tick.
+    Count uint32    // Number of currently overflowing generation calls.
+    Ticks uint32    // For how many ticks in total we've already been dealing with the *current* overflow.
 }
-``
+```
 Keep track of the counter. If it keeps increasing, you're no longer bursting - you're simply over capacity 
 and *eventually* need to slow down or you'll *eventually* starve your system. The `Ticks` count lets you estimate
 how long the generator has already been overflowing without keeping track of time yourself. A tick is *roughly* 1ms.
@@ -301,31 +295,33 @@ The order of generation when stalling occurs is `undefined`. It is not a FIFO qu
 goroutines get woken up alongside inflight goroutines which have not yet been stalled, where the order of the former is 
 handled by the runtime. A livelock is therefore possible if demand doesn't decrease. This behaviour *may* change and 
 inflight goroutines *may* get thrown onto the stalling wait list if one is up and running, but this requires careful 
-inspection. And since this is considered an *extremely* unrealistic use case scenario, it's not a priority. 
+inspection. And since this is considered an unrealistic scenario which can be avoided with simple configuration, 
+it's not a priority.
 
 </p>
 </details>
 
 #### Clock drift and the tick-tock toggle
 
-Just like all other specs that rely on clock times to resolve ambiguity, **sno**s are prone to clock drifts. But it's 
-got your back.
+Just like all other specs that rely on clock times to resolve ambiguity, **sno**s are prone to clock drifts. But
+unlike all those others specs, **sno** adjusts itself to the new time - instead of waiting (blocking), it tick-tocks.
 
 **The tl;dr** applying to any system, really: ensure your deployments use properly synchronized system clocks 
 (via NTP) to mitigate the *size* of drifts. Ideally, use a NTP server pool that applies 
-a [smear for leap seconds](https://developers.google.com/time/smear). Despite the original Snowflake spec 
-suggesting otherwise, using NTP in slew mode (to avoid regressions entirely) [is not always a good idea](https://www.redhat.com/en/blog/avoiding-clock-drift-vms).
+a gradual [smear for leap seconds](https://developers.google.com/time/smear). Despite the original Snowflake spec 
+suggesting otherwise, using NTP in slew mode (to avoid regressions entirely) 
+[is not always a good idea](https://www.redhat.com/en/blog/avoiding-clock-drift-vms).
 
 Also remember that containers tend to get *paused* meaning their clocks are paused with them.
 
-As far as **sno** is concerned, in typical scenarios you can enjoy a wait-free ride without requiring slew mode nor
-having to worry about even large drifts, at least as far as collisions are concerned.
+As far as **sno**, collisions and performance are concerned, in typical scenarios you can enjoy a wait-free ride  
+without requiring slew mode nor having to worry about even large drifts.
 
 <details>
 <summary>Star Trek: Voyager mode, <b>How tick-tocking works</b></summary>
 <p>
 
-**sno** attempts to mitigate the issue *entirely* - both despite and because of its small pool of bits to work with.
+**sno** attempts to eliminate the issue *entirely* - both despite and because of its small pool of bits to work with.
 
 The approach it takes is simple - each generator keeps track of the highest wall clock time it got from the OS\*, 
 each time it generates a new timestamp. If we get a time that is lower than the one we recorded, e.g. the clock 
@@ -350,7 +346,7 @@ So this is a **sno-go**.
 (I will show myself out...)
 
 The simplistic approach of tick-tocking *entirely eliminates* that collision chance - but with a rigorous assumption: 
-backwards drifts happen at most once into a specific period, e.g. from the highest recorded time into the past 
+regressions happen at most once into a specific period, e.g. from the highest recorded time into the past 
 and never back into that particular timeframe (let alone even further into the past). 
 
 This *generally* is exactly the case but oddities as far as time synchronization, bad clocks and NTP client 
@@ -358,11 +354,11 @@ behaviour goes *do* happen. And in distributed systems, every edge case that can
 
 ##### How others do it
 
-- [Sonyflake](https://github.com/sony/sonyflake) goes to sleep until back at the wall clock time it was already at 
+- [Sonyflake] goes to sleep until back at the wall clock time it was already at 
 previously. All goroutines attempting to generate are blocked.
-- [snowflake](https://github.com/bwmarrin/snowflake) hammers the OS with syscalls to get the current time until back 
+- [snowflake] hammers the OS with syscalls to get the current time until back 
 at the time it was already at previously. All goroutines attempting to generate are blocked.
-- [xid](https://github.com/rs/xid) goes ¯\\_(ツ)_/¯ and doesn't tackle drifts at all.
+- [xid] goes ¯\\_(ツ)_/¯ and does not tackle drifts at all.
 - Entropy-based specs (like UUID or KSUID) don't really need to care as they are generally not prone, even to 
 extreme drifts - you run with a risk all the time.
 
@@ -398,12 +394,12 @@ The **metabyte** is unique to **sno** across the specs the author researched, bu
 in IDs is an ancient one. It's effectively just a *byte-of-whatever-you-want-it-to-be* - but perhaps 
 *8-bits-of-whatever-you-want-them-to-be* does a better job of explaining its versatility.
 
-### 0 is a valid metabyte
+### `0` is a valid metabyte
 
 **sno** is agnostic as to what that byte represents and it is **optional**. None of the properties of **sno**s
 get violated if you simply pass a `0`.
 
-However, if you can't find a use-case for it, then you may be better served using a different ID spec/library 
+However, if you can't find use for it, then you may be better served using a different ID spec/library 
 altogether (➜ [Alternatives](#alternatives)). You'd be wasting a byte that could give you benefits elsewhere.
 
 ### Why?
@@ -497,7 +493,7 @@ have a uniquely identifiable event, know *when* and *where* it happened, what th
 had 7 spare bits (for higher precision time, maybe?)
 
 - Polymorphism has already been covered. Consider not just data storage, but also things like (un)marshaling 
-polymorphic types efficiently. Take a JSON of `{id: "aaaaaaaa55aaaaa", foo: "bar", baz: "bar"}`. 
+polymorphic types efficiently. Take a JSON of `{id: "aaaaaaaa55aaaaaa", foo: "bar", baz: "bar"}`. 
 The 8-th and 9-th (0-indexed) characters of the ID contain the encoded bits of the metabyte. Decode that 
 (use one of the utilities provided by the library) and you now know what internal type the data should unmarshal 
 to without first unmarshaling into an intermediary structure (nor rolling out a custom decoder for this type). 

@@ -6,15 +6,18 @@ import (
 )
 
 var (
-	generator *Generator
+	generator Generator
 	zero      ID
 )
 
 func init() {
-	var err error
-	if generator, err = NewGenerator(nil, nil); err != nil {
+	g, err := NewGenerator(nil, nil)
+	if err != nil {
+		// Will only ever happen if the underlying call to crypto/rand fails.
 		panic(err)
 	}
+
+	generator = *g
 }
 
 // New uses the package-level generator to generate a new ID using the current system

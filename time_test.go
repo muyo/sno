@@ -7,7 +7,7 @@ import (
 
 func TestTime_Nanotime(t *testing.T) {
 	actual, _ := nanotime()
-	expected := (epochNsec + time.Now().UnixNano()) / TimeUnit
+	expected := (time.Now().UnixNano() - epochNsec) / TimeUnit
 
 	if actual != expected {
 		t.Errorf("expected [%v], got [%v]", expected, actual)
