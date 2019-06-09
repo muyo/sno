@@ -1,4 +1,4 @@
-// Package sno provides generators of compact unique IDs with embedded metadata.
+// Package sno provides fast generators of compact, sortable, unique IDs with embedded metadata.
 package sno
 
 import (
@@ -418,7 +418,7 @@ func (g *Generator) seqOverflowLoop() {
 			// Even if we're at a count of 0 but on our first tick, it means the generator declogged already,
 			// but we still notify that it happened.
 			ticks++
-			if retryNotify || g.seqOverflowCount == 0 || ticks%tickRateDiv == 1 {
+			if retryNotify || g.seqOverflowCount == 0 || ticks%4 == 1 {
 				select {
 				case g.seqOverflowChan <- &SequenceOverflowNotification{
 					Now:   t,
@@ -496,7 +496,7 @@ func sanitizeSnapshotBounds(s *GeneratorSnapshot) error {
 		s.SequenceMin, s.SequenceMax = s.SequenceMax, s.SequenceMin
 	}
 
-	if s.SequenceMax-s.SequenceMin < minSequencePoolSize-1 {
+	if s.SequenceMax-s.SequenceMin-1 < minSequencePoolSize {
 		return invalidSequenceBounds(s, errSequencePoolTooSmallMsg)
 	}
 

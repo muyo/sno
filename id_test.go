@@ -2,6 +2,7 @@ package sno
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -34,7 +35,7 @@ func TestID_Timestamp(t *testing.T) {
 	tn := time.Now()
 	id := New(255)
 
-	expected := tn.UnixNano() / TimeUnit * timeUnitStep // Drop precision for the comparison.
+	expected := tn.UnixNano() / TimeUnit * 4 // Drop precision for the comparison.
 	actual := id.Timestamp()
 
 	if actual != expected {
@@ -186,6 +187,10 @@ func TestID_UnmarshalJSON_Invalid(t *testing.T) {
 	if err != errInvalidDataSize {
 		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
 	}
+
+	if err != nil && err.Error() != errInvalidDataSizeMsg {
+		t.Errorf("expected error [%s], got [%s]", errInvalidDataSizeMsg, err.Error())
+	}
 }
 
 func TestID_UnmarshalJSON_Null(t *testing.T) {
@@ -272,19 +277,20 @@ func TestID_Scan(t *testing.T) {
 	id := New(255)
 
 	for _, c := range []struct {
-		name string
-		in   interface{}
-		out  ID
-		err  error
+		name   string
+		in     interface{}
+		out    ID
+		err    error
+		errMsg string
 	}{
-		{"nil", nil, ID{}, nil},
-		{"bytes-valid", id[:], id, nil},
-		{"bytes-invalid", make([]byte, 3), zero, errInvalidDataSize},
-		{"bytes-zero", []byte{}, zero, nil},
-		{"string-valid", id.String(), id, nil},
-		{"string-invalid", "123", zero, errInvalidDataSize},
-		{"string-zero", "", zero, nil},
-		{"invalid", 69, ID{}, &InvalidTypeError{}},
+		{"nil", nil, ID{}, nil, ""},
+		{"bytes-valid", id[:], id, nil, ""},
+		{"bytes-invalid", make([]byte, 3), zero, errInvalidDataSize, errInvalidDataSizeMsg},
+		{"bytes-zero", []byte{}, zero, nil, ""},
+		{"string-valid", id.String(), id, nil, ""},
+		{"string-invalid", "123", zero, errInvalidDataSize, errInvalidDataSizeMsg},
+		{"string-zero", "", zero, nil, ""},
+		{"invalid", 69, ID{}, &InvalidTypeError{Value: 69}, fmt.Sprintf(errInvalidTypeFmt, 69)},
 	} {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
@@ -301,6 +307,8 @@ func TestID_Scan(t *testing.T) {
 				t.Errorf("got unexpected error: %s", err)
 			} else if actual, expected := reflect.TypeOf(err), reflect.TypeOf(c.err); actual != expected {
 				t.Errorf("expected error type [%s], got [%s]", expected, actual)
+			} else if err != nil && c.errMsg != "" && err.Error() != c.errMsg {
+				t.Errorf("expected error message [%s], got [%s]", c.errMsg, err.Error())
 			}
 		})
 	}

@@ -2,6 +2,15 @@ package sno
 
 import "fmt"
 
+const (
+	errInvalidDataSizeMsg         = "sno: unrecognized data size"
+	errInvalidTypeFmt             = "sno: unrecognized type: %T"
+	errInvalidSequenceBoundsFmt   = "sno: %s; min: %d, sequence: %d, max: %d, pool: %d"
+	errSequenceBoundsIdenticalMsg = "sequence bounds are identical - need a sequence pool with a capacity of at least 4"
+	errSequenceUnderflowsBound    = "current sequence underflows the given lower bound"
+	errSequencePoolTooSmallMsg    = "generators require a sequence pool with a capacity of at least 4"
+)
+
 var (
 	errInvalidDataSize = &InvalidDataSizeError{}
 )
@@ -10,7 +19,7 @@ var (
 // is not nil and not of a size of: SizeBinary, SizeEncoded nor 0.
 type InvalidDataSizeError struct{}
 
-func (e *InvalidDataSizeError) Error() string { return "sno: unrecognized data size" }
+func (e *InvalidDataSizeError) Error() string { return errInvalidDataSizeMsg }
 
 // InvalidTypeError gets returned when attempting to scan a value that is neither...
 //	- a string
@@ -22,7 +31,7 @@ type InvalidTypeError struct {
 }
 
 func (e *InvalidTypeError) Error() string {
-	return fmt.Sprintf("sno: unrecognized type: %T", e.Value)
+	return fmt.Sprintf(errInvalidTypeFmt, e.Value)
 }
 
 // InvalidSequenceBoundsError gets returned when a Generator gets seeded with sequence boundaries
@@ -34,12 +43,6 @@ type InvalidSequenceBoundsError struct {
 	Msg string
 }
 
-const (
-	errSequenceBoundsIdenticalMsg = "sequence bounds are identical - need a sequence pool with a capacity of at least 4"
-	errSequenceUnderflowsBound    = "current sequence underflows the given lower bound"
-	errSequencePoolTooSmallMsg    = "generators require a sequence pool with a capacity of at least 4"
-)
-
 func (e *InvalidSequenceBoundsError) Error() string {
-	return fmt.Sprintf("sno: %s; current: %d, min: %d, max: %d, pool: %d", e.Msg, e.Cur, e.Min, e.Max, e.Max-e.Min+1)
+	return fmt.Sprintf(errInvalidSequenceBoundsFmt, e.Msg, e.Min, e.Cur, e.Max, e.Max-e.Min+1)
 }

@@ -12,8 +12,7 @@ const (
 	epochNsec = Epoch * 1e9
 
 	// TimeUnit is the time unit timestamps are embedded with - 4msec, handled as nanoseconds internally.
-	TimeUnit     = timeUnitStep * 1e6
-	timeUnitStep = 4
+	TimeUnit = 4e6
 
 	// MaxTimestamp is the max number of time units that can be embedded in an ID's timestamp.
 	// Corresponds to 2079-09-07 15:47:35.548 UTC in our custom epoch.
@@ -27,7 +26,7 @@ const (
 	minSequencePoolSize = 4
 
 	tickRate    = TimeUnit / tickRateDiv
-	tickRateDiv = timeUnitStep
+	tickRateDiv = 4
 )
 
 //go:linkname now time.now

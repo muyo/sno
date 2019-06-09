@@ -23,6 +23,10 @@ func TestGlobal_FromEncodedString_Invalid(t *testing.T) {
 	if err != errInvalidDataSize {
 		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
 	}
+
+	if err != nil && err.Error() != errInvalidDataSizeMsg {
+		t.Errorf("expected error [%s], got [%s]", errInvalidDataSizeMsg, err.Error())
+	}
 }
 
 func TestGlobal_FromEncodedBytes_Valid(t *testing.T) {
@@ -43,6 +47,10 @@ func TestGlobal_FromEncodedBytes_Invalid(t *testing.T) {
 	_, err := FromEncodedBytes([]byte("012brpk4q72xwf2m63l1245453gfdgxz"))
 	if err != errInvalidDataSize {
 		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
+	}
+
+	if err != nil && err.Error() != errInvalidDataSizeMsg {
+		t.Errorf("expected error [%s], got [%s]", errInvalidDataSizeMsg, err.Error())
 	}
 }
 

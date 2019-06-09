@@ -5,11 +5,11 @@ It aims to be friendly to both machines and humans, compact, *versatile* and fas
 
 This repository contains a **Go** library for generating such IDs. 
 
-[![GoDoc](https://img.shields.io/badge/godoc-reference-9cf.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) 
+[![GoDoc](https://img.shields.io/badge/godoc-reference-00a1fe.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) 
 [![Travis build: master](https://img.shields.io/travis/muyo/sno/master.svg?logo=travis&style=flat-square)](https://travis-ci.org/muyo/sno) 
 [![Coverage](https://img.shields.io/codecov/c/github/muyo/sno.svg?logo=codecov&style=flat-square)](https://codecov.io/gh/muyo/sno)
-[![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno)](https://goreportcard.com/report/github.com/muyo/sno) 
-[![License](http://img.shields.io/badge/license-MIT-9cf.svg?style=flat-square)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
+[![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno?style=flat-square)](https://goreportcard.com/report/github.com/muyo/sno) 
+[![License](http://img.shields.io/badge/license-MIT-00a1fe.svg?style=flat-square)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
 
 ```bash
 go get -u github.com/muyo/sno
@@ -24,7 +24,7 @@ go get -u github.com/muyo/sno
   <br />The encoding is URL-safe and non-ambiguous. It also happens to be at the binary length of UUIDs - 
   meaning **sno**s can be stored as UUIDs in your database of choice, if that is preferred.
 - **K-sortable** in either representation
-- Embedded timestamp with a 4msec resolution, bounded within the years 2010 - 2079. Handles time regressions gracefully,
+- Embedded timestamp with a **4msec resolution**, bounded within the years **2010 - 2079**. Handles time regressions gracefully,
   without waiting (➜ [Time and sequence](#time-and-sequence))
 - Embedded byte for arbitrary data (➜ [Metabyte](#metabyte))
 - ‭A pool of at minimum **16,384,000** IDs per second:
@@ -743,7 +743,8 @@ introduces are unfortunately incompatible with xid's spec.
 - [Mongo ObjectIds](https://docs.mongodb.com/manual/reference/method/ObjectId/)
 - [Instagram: Sharding & IDs at Instagram](https://instagram-engineering.com/sharding-ids-at-instagram-1cf5a71e5a5c)
 - [Flickr: Ticket Servers: Distributed Unique Primary Keys on the Cheap](http://code.flickr.net/2010/02/08/ticket-servers-distributed-unique-primary-keys-on-the-cheap/)
-- [Segment: A brief history of the UUID](https://segment.com/blog/a-brief-history-of-the-uuid/)
+- [Segment: A brief history of the UUID](https://segment.com/blog/a-brief-history-of-the-uuid/) - about KSUID and the shortcomings of UUIDs.
+- [Farfetch: Unique integer generation in distributed systems](https://www.farfetchtechblog.com/en/blog/post/unique-integer-generation-in-distributed-systems) - uint32 utilizing Cassandra to coordinate.
 
 Also potentially of interest:
 - [Lamport timestamps](https://en.wikipedia.org/wiki/Lamport_timestamps) (vector/logical clocks)
