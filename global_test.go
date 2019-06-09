@@ -1,7 +1,6 @@
 package sno
 
 import (
-	"reflect"
 	"testing"
 )
 
@@ -94,7 +93,7 @@ func TestGlobal_FromBinaryBytes_Invalid(t *testing.T) {
 }
 
 func TestGlobal_Zero(t *testing.T) {
-	if actual := Zero(); !reflect.DeepEqual(actual, ID{}) {
+	if actual := Zero(); actual != (ID{}) {
 		t.Error("Zero() not equal to ID{}")
 	}
 }

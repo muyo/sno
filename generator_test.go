@@ -1,6 +1,7 @@
 package sno
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,10 +27,6 @@ func TestPartition_AsUint16(t *testing.T) {
 	}
 }
 
-// TODO(alcore) Needs deterministic time source to cover, amongst others:
-// - Monotonic order guarantees when not overflowing.
-// - Simulated clock regression and multi-regression.
-// - Restoration from snapshot taken prior to a regression.
 func TestGenerator_NewNoOverflow(t *testing.T) {
 	var (
 		part    = Partition{255, 255}
@@ -161,6 +158,223 @@ func TestGenerator_NewOverflows(t *testing.T) {
 		if c > seqPool {
 			t.Errorf("count of IDs in the given timeframe exceeds pool; timestamp [%d], pool [%d], count [%d]", tf, seqPool, c)
 		}
+	}
+}
+
+var (
+	staticWallNow *int64
+	staticInc     = new(int64)
+)
+
+func init() {
+	wall := nanotime()
+	staticWallNow = &wall
+}
+
+func staticTime() (wall int64) {
+	return atomic.LoadInt64(staticWallNow)
+}
+
+func staticIncTime() (wall int64) {
+	wall = atomic.LoadInt64(staticWallNow) + atomic.LoadInt64(staticInc)*TimeUnit
+
+	atomic.AddInt64(staticInc, 1)
+
+	return
+}
+
+func TestGenerator_NewTickTocks(t *testing.T) {
+	var (
+		seqPool = 2048
+		seqMin  = uint16(seqPool)
+		seqMax  = uint16(2*seqPool - 1)
+
+		g, err = NewGenerator(&GeneratorSnapshot{
+			Partition:   Partition{255, 255},
+			SequenceMin: seqMin,
+			SequenceMax: seqMax,
+		}, nil)
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make([]ID, seqPool)
+
+	// First batch follows normal time progression.
+	for i := 0; i < 512; i++ {
+		ids[i] = g.New(255)
+	}
+
+	wall := nanotime()
+	atomic.StoreInt64(staticWallNow, wall-TimeUnit)
+
+	// Swap out the time source. Next batch is supposed to set a drift, have their tick-tock bit
+	// set to 1, and wallSafe on the generator must be set accordingly.
+	g.clock = staticTime
+
+	if atomic.LoadUint32(g.drifts) != 0 {
+		t.Errorf("expected [0] drifts recorded, got [%d]", atomic.LoadUint32(g.drifts))
+	}
+
+	if atomic.LoadInt64(g.wallSafe) != 0 {
+		t.Errorf("expected wallSafe to be [0], is [%d]", atomic.LoadInt64(g.wallSafe))
+	}
+
+	for j := 512; j < 1024; j++ {
+		ids[j] = g.New(255)
+	}
+
+	if atomic.LoadUint32(g.drifts) != 1 {
+		t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(g.drifts))
+	}
+
+	if atomic.LoadInt64(g.wallSafe) == atomic.LoadInt64(staticWallNow) {
+		t.Errorf("expected wallSafe to be [%d], was [%d]", atomic.LoadInt64(staticWallNow), atomic.LoadInt64(g.wallSafe))
+	}
+
+	for i := 0; i < 512; i++ {
+		if ids[i][4]&1 != 0 {
+			t.Errorf("%d: expected tick-tock bit to not be set, was set", i)
+		}
+	}
+
+	for j := 512; j < 1024; j++ {
+		if ids[j][4]&1 != 1 {
+			t.Errorf("%d: expected tick-tock bit to be set, was not", j)
+		}
+	}
+
+	// Multi-regression, checking on a single goroutine.
+	atomic.AddInt64(staticWallNow, -TimeUnit)
+
+	// Use a clock where the first call will return the static clock times
+	// but subsequent calls will return higher times. Since we didn't adjust the mono clock
+	// at all insofar, it's currently 1 TimeUnit (first drift) behind wallSafe, which got set
+	// during the initial drift. This is the time the next generation call(s) are supposed
+	// to sleep, as we are simulating a multi-regression (into an unsafe past where can't
+	// tick-tock again until reaching wallSafe).
+	g.clock = staticIncTime
+
+	_, _, mono1 := now()
+	id := g.New(255)
+	if id[4]&1 != 1 {
+		t.Errorf("expected tick-tock bit to be set, was not")
+	}
+	_, _, mono2 := now()
+
+	// We had 2 regressions by 1 TimeUnit each, so sleep duration should've been roughly
+	// the same since time was static (got incremented only after the sleep).
+	if mono2-mono1 < 2*TimeUnit {
+		t.Errorf("expected to sleep for at least [%f]ns, took [%d] instead", 2*TimeUnit, mono2-mono1)
+	} else if mono2-mono1 > 3*TimeUnit {
+		t.Errorf("expected to sleep for no more than [%f]ns, took [%d] instead", 3*TimeUnit, mono2-mono1)
+	}
+
+	if atomic.LoadUint32(g.drifts) != 1 {
+		t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(g.drifts))
+	}
+
+	// At this point we are going to simulate another drift, somewhere in the 'far' future,
+	// with parallel load.
+	g.clock = staticTime
+	atomic.AddInt64(staticWallNow, 100*TimeUnit)
+
+	g.New(255) // Updates wallHi
+
+	// Regress again. Not adjusting mono clock - calls below are supposed to simply drift - drift
+	// count is supposed to end at 2 (since we're still using the same generator) and tick-tock
+	// bit is supposed to be unset.
+	atomic.AddInt64(staticWallNow, -2*TimeUnit)
+
+	var (
+		batchCount = 4
+		batchSize  = g.Cap() / batchCount
+		wg         sync.WaitGroup
+	)
+
+	wg.Add(batchCount)
+
+	for i := 0; i < batchCount; i++ {
+		go func(mul int) {
+			for i := mul * batchSize; i < mul*batchSize+batchSize; i++ {
+				ids[i] = g.New(255)
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+
+	if atomic.LoadUint32(g.drifts) != 2 {
+		t.Errorf("expected [2] drifts recorded, got [%d]", atomic.LoadUint32(g.drifts))
+	}
+
+	for i := 0; i < g.Cap(); i++ {
+		if ids[i][4]&1 != 0 {
+			t.Errorf("%d: expected tick-tock bit to not be set, was set", i)
+		}
+	}
+
+}
+
+func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
+	// First one we simply check that the times get applied at all. We get rid of the time
+	// added while simulating the last drift.
+	g, err := NewGenerator(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Reset the static clock.
+	g.clock = staticTime
+	wall := nanotime()
+	atomic.StoreInt64(staticWallNow, wall)
+
+	// Simulate a regression.
+	g.New(255)
+	atomic.AddInt64(staticWallNow, -TimeUnit)
+	g.New(255)
+
+	snapshot := g.Snapshot()
+	g, err = NewGenerator(&snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if snapshot.WallSafe != atomic.LoadInt64(g.wallSafe) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadInt64(g.wallSafe))
+	}
+
+	if snapshot.WallHi != atomic.LoadInt64(g.wallHi) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallHi, atomic.LoadInt64(g.wallHi))
+	}
+
+	// Second test, with a snapshot taken "in the future" (relative to current wall clock time).
+	wall = nanotime()
+	g.clock = staticTime
+	atomic.StoreInt64(staticWallNow, wall+100*TimeUnit)
+
+	// Simulate another regression. Takes place in the future - we are going to take a snapshot
+	// and create a generator using that snapshot, where the generator will use nanotime (current time)
+	// as comparison and is supposed to handle this as if it is in the past relative to the snapshot.
+	g.New(255)
+	atomic.AddInt64(staticWallNow, -TimeUnit)
+	g.New(255)
+
+	snapshot = g.Snapshot()
+	g, err = NewGenerator(&snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if snapshot.WallSafe != atomic.LoadInt64(g.wallSafe) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadInt64(g.wallSafe))
+	}
+
+	if atomic.LoadInt64(g.wallHi) != wall {
+		t.Errorf("expected [%d], got [%d]", wall, atomic.LoadInt64(g.wallHi))
 	}
 }
 
@@ -382,7 +596,7 @@ func TestGenerator_Sequence_Batch(t *testing.T) {
 	}
 }
 
-func TestGenerator_Sequence_FromSnapshot(t *testing.T) {
+func TestGenerator_FromSnapshot_Sequence(t *testing.T) {
 	seq := uint32(1024)
 	g, err := NewGenerator(&GeneratorSnapshot{
 		SequenceMin: uint16(seq),
@@ -404,6 +618,138 @@ func TestGenerator_Sequence_FromSnapshot(t *testing.T) {
 	}
 	if actual2 != expected2 {
 		t.Errorf("expected [%d], got [%d]", expected2, actual2)
+	}
+
+	// Defaults.
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: 0,
+		SequenceMax: 0,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if g.SequenceMin() != 0 {
+		t.Errorf("expected [%d], got [%d]", 0, g.SequenceMin())
+	}
+
+	if g.SequenceMax() != MaxSequence {
+		t.Errorf("expected [%d], got [%d]", MaxSequence, g.SequenceMax())
+	}
+
+	// Arbitrary order
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: 2048,
+		SequenceMax: 1024,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if g.SequenceMin() != 1024 {
+		t.Errorf("expected [%d], got [%d]", 1024, g.SequenceMin())
+	}
+
+	if g.SequenceMax() != 2048 {
+		t.Errorf("expected [%d], got [%d]", 2048, g.SequenceMax())
+	}
+
+	// Max as default when min is given.
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: 2048,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if g.SequenceMin() != 2048 {
+		t.Errorf("expected [%d], got [%d]", 2048, g.SequenceMin())
+	}
+
+	if g.SequenceMax() != MaxSequence {
+		t.Errorf("expected [%d], got [%d]", MaxSequence, g.SequenceMax())
+	}
+
+	// Identical bounds.
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: 2048,
+		SequenceMax: 2048,
+	}, nil)
+	if err == nil {
+		t.Errorf("expected error, got none")
+	} else {
+		verr, ok := err.(*InvalidSequenceBoundsError)
+		if !ok {
+			t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
+		} else {
+			if verr.Msg != errSequenceBoundsIdenticalMsg {
+				t.Errorf("expected error msg [%s], got [%s]", errSequenceBoundsIdenticalMsg, verr.Msg)
+			}
+
+			if verr.Min != 2048 {
+				t.Errorf("expected [%d], got [%d]", 2048, verr.Min)
+			}
+
+			if verr.Max != 2048 {
+				t.Errorf("expected [%d], got [%d]", 2048, verr.Max)
+			}
+		}
+	}
+
+	// Pool size too small.
+	seqMin := uint16(2048)
+	seqMax := seqMin + minSequencePoolSize - 2
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: seqMin,
+		SequenceMax: seqMax,
+	}, nil)
+	if err == nil {
+		t.Errorf("expected error, got none")
+	} else {
+		verr, ok := err.(*InvalidSequenceBoundsError)
+		if !ok {
+			t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
+		} else {
+			if verr.Msg != errSequencePoolTooSmallMsg {
+				t.Errorf("expected error msg [%s], got [%s]", errSequencePoolTooSmallMsg, verr.Msg)
+			}
+
+			if verr.Min != seqMin {
+				t.Errorf("expected [%d], got [%d]", seqMin, verr.Min)
+			}
+
+			if verr.Max != seqMax {
+				t.Errorf("expected [%d], got [%d]", seqMax, verr.Max)
+			}
+		}
+	}
+
+	// Sequence underflows min
+	seqMin = uint16(2048)
+	seq = uint32(seqMin - 1)
+	g, err = NewGenerator(&GeneratorSnapshot{
+		SequenceMin: seqMin,
+		Sequence:    seq,
+	}, nil)
+	if err == nil {
+		t.Errorf("expected error, got none")
+	} else {
+		verr, ok := err.(*InvalidSequenceBoundsError)
+		if !ok {
+			t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
+		} else {
+			if verr.Msg != errSequenceUnderflowsBound {
+				t.Errorf("expected error msg [%s], got [%s]", errSequenceUnderflowsBound, verr.Msg)
+			}
+
+			if verr.Min != seqMin {
+				t.Errorf("expected [%d], got [%d]", seqMin, verr.Min)
+			}
+
+			if verr.Cur != seq {
+				t.Errorf("expected [%d], got [%d]", seq, verr.Cur)
+			}
+		}
 	}
 }
 
@@ -433,7 +779,7 @@ func TestGenerator_Snapshot(t *testing.T) {
 	}
 
 	atomic.AddUint32(g.drifts, 1)
-	wallNow, _ := nanotime()
+	wallNow := g.clock()
 	g.New(255) // First call will catch a zero wallHi and reset the sequence, while we want to measure an incr.
 	g.New(255)
 	actual = g.Snapshot()

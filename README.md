@@ -5,10 +5,11 @@ It aims to be friendly to both machines and humans, compact, *versatile* and fas
 
 This repository contains a **Go** library for generating such IDs. 
 
-[![GoDoc](https://godoc.org/github.com/muyo/sno?status.svg)](https://godoc.org/github.com/muyo/sno) 
+[![GoDoc](https://img.shields.io/badge/godoc-reference-9cf.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) 
+[![Travis build: master](https://img.shields.io/travis/muyo/sno/master.svg?logo=travis&style=flat-square)](https://travis-ci.org/muyo/sno) 
+[![Coverage](https://img.shields.io/codecov/c/github/muyo/sno.svg?logo=codecov&style=flat-square)](https://codecov.io/gh/muyo/sno)
 [![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno)](https://goreportcard.com/report/github.com/muyo/sno) 
-[![Travis build: master](https://travis-ci.org/muyo/sno.svg)](https://travis-ci.org/muyo/sno) 
-[![License](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
+[![License](http://img.shields.io/badge/license-MIT-9cf.svg?style=flat-square)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
 
 ```bash
 go get -u github.com/muyo/sno

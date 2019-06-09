@@ -26,11 +26,10 @@ type GeneratorSnapshot struct {
 	// but not underflow SequenceMin.
 	Sequence uint32 `json:"sequence"`
 
-	Now        int64  `json:"now"`        // Wall time the snapshot was taken at in sno time units and in our epoch.
-	WallHi     int64  `json:"wallHi"`     // Highest wall clock time recorded.
-	MonoLo     int64  `json:"monoLo"`     // Monotonic clock safe lower bound (safe time to resume generating).
-	MonoOffset int64  `json:"monoOffset"` //
-	Drifts     uint32 `json:"drifts"`     // Count of wall clock regressions the generator tick-tocked at.
+	Now      int64  `json:"now"`      // Wall time the snapshot was taken at in sno time units and in our epoch.
+	WallHi   int64  `json:"wallHi"`   //
+	WallSafe int64  `json:"wallSafe"` //
+	Drifts   uint32 `json:"drifts"`   // Count of wall clock regressions the generator tick-tocked at.
 }
 
 // Partition represents the fixed identifier of a Generator.
@@ -65,9 +64,8 @@ type Generator struct {
 	partition Partition // Immutable.
 
 	drifts     *uint32     // Uses the LSB for the tick-tock and serves as a counter.
-	wallHi     *int64      // Highest recorded wall clock time.
-	monoLo     *int64      //
-	monoOffset int64       // Immutable.
+	wallHi     *int64      //
+	wallSafe   *int64      //
 	regression *sync.Mutex // Regression branch lock.
 
 	seq       *uint32
@@ -79,6 +77,8 @@ type Generator struct {
 	seqOverflowTicker *time.Ticker
 	seqOverflowCount  uint32 // Behind seqOverflowCond lock.
 	seqOverflowChan   chan<- *SequenceOverflowNotification
+
+	clock func() (wall int64)
 }
 
 // NewGenerator returns a new generator based on the optional Snapshot.
@@ -95,18 +95,19 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		return nil, err
 	}
 
-	// We do a very rudimentary comparison on the wall clocks.
-	// snapshot.MonoOffset gets sampled along with snapshot.Now. We apply the difference in wall clock times
-	// as if monotonic time also changed. If wallNow is behind snapshot.Now, we effectively extend the time it
-	// takes until we reach a new safe boundary (monoLo). Otherwise we decrease it, simply adding passed time.
-	if snapshot.Now != 0 {
-		wallNow, monoNow := nanotime()
-		snapshot.MonoOffset += wallNow - snapshot.Now - monoNow
-		snapshot.MonoLo -= monoNow
+	if snapshot.WallSafe != 0 {
+		wallNow := nanotime()
+		// Since we can't currently infer whether it'd be safe to simply resume (e.g. whether
+		// the snapshot got taken during a simple drift - a single regression, or while contenders
+		// were sleeping during a multi-regression), we take the safe route out and set wallHi so
+		// that the multi-regression branch will get triggered until WallSafe.
+		if snapshot.WallSafe > wallNow {
+			snapshot.WallHi = wallNow
+		}
 	}
 
 	seq := uint32(snapshot.Sequence)
-	// Offset by -1 because we start 0-indexed, while AddUint called first in NewWithTime()
+	// Offset by -1 because we start 0-indexed, while AddUint gets called first in NewWithTime()
 	// and unlike New(), NewWithTime() has no time progression branch that would catch the first
 	// generation and reset the sequence along with time.
 	seqStatic := uint32(snapshot.SequenceMin - 1)
@@ -121,9 +122,9 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		seqOverflowChan: c,
 		drifts:          &snapshot.Drifts,
 		wallHi:          &snapshot.WallHi,
-		monoLo:          &snapshot.MonoLo,
-		monoOffset:      snapshot.MonoOffset,
+		wallSafe:        &snapshot.WallSafe,
 		regression:      &sync.Mutex{},
+		clock:           nanotime,
 	}, nil
 }
 
@@ -149,8 +150,9 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 		seqOverflowChan: c,
 		drifts:          new(uint32),
 		wallHi:          new(int64),
-		monoLo:          new(int64),
+		wallSafe:        new(int64),
 		regression:      &sync.Mutex{},
+		clock:           nanotime,
 	}, nil
 }
 
@@ -158,8 +160,8 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 func (g *Generator) New(meta byte) (id ID) {
 	var (
 		// Note: Single load of wallHi for the evaluations is correct (as wallNow is static).
-		wallHi           = atomic.LoadInt64(g.wallHi)
-		wallNow, monoNow = nanotime()
+		wallHi  = atomic.LoadInt64(g.wallHi)
+		wallNow = g.clock()
 	)
 
 	// Fastest branch if we're still in the same timeframe.
@@ -230,17 +232,14 @@ func (g *Generator) New(meta byte) (id ID) {
 		return g.New(meta)
 	}
 
-	monoNow += g.monoOffset
-	monoLo := *g.monoLo
-
-	if monoNow > monoLo {
+	wallSafe := *g.wallSafe
+	if wallNow > wallSafe {
 		// Branch for the one routine that gets to apply the drift.
-		driftNsecs := (wallHi - wallNow) * TimeUnit
-
-		// monoLo becomes a moment in the future of the monotonic clock.
-		// Sequence gets reset on drifts as time changed. Every other contender is in a branch
-		// that ends in a rerun so they'll pick up all the changes.
-		atomic.StoreInt64(g.monoLo, monoNow+driftNsecs)
+		// wallHi is bidirectional (gets updated whenever the wall clock time progresses - or when a drift
+		// gets applied, which is when it regresses). In contrast, wallSafe only ever gets updated when
+		// a drift gets applied and always gets set to the highest time recorded, meaning it
+		// increases monotonically.
+		atomic.StoreInt64(g.wallSafe, wallHi)
 		atomic.StoreInt64(g.wallHi, wallNow)
 		atomic.StoreUint32(g.seq, g.seqMin)
 
@@ -255,10 +254,10 @@ func (g *Generator) New(meta byte) (id ID) {
 	}
 
 	// Branch for all routines that are in an "unsafe" past (e.g. multiple time regressions happened
-	// before we reached monoLo again).
+	// before we reached wallSafe again).
 	g.regression.Unlock()
 
-	time.Sleep(time.Duration(monoLo - monoNow))
+	time.Sleep(time.Duration(wallSafe - wallNow))
 
 	return g.New(meta)
 }
@@ -314,7 +313,7 @@ func (g *Generator) Partition() Partition {
 // determine the current overflow via:
 //	overflow := int(uint32(generator.SequenceMax()) - generator.Sequence())
 func (g *Generator) Sequence() uint32 {
-	if wallNow, _ := nanotime(); wallNow == atomic.LoadInt64(g.wallHi) {
+	if wallNow := g.clock(); wallNow == atomic.LoadInt64(g.wallHi) {
 		return atomic.LoadUint32(g.seq)
 	}
 
@@ -333,7 +332,7 @@ func (g *Generator) SequenceMax() uint16 {
 
 // Len returns the number of IDs generated in the current timeframe.
 func (g *Generator) Len() int {
-	if wallNow, _ := nanotime(); wallNow == atomic.LoadInt64(g.wallHi) {
+	if wallNow := g.clock(); wallNow == atomic.LoadInt64(g.wallHi) {
 		if seq := atomic.LoadUint32(g.seq); g.seqMax > seq {
 			return int(seq-g.seqMin) + 1
 		}
@@ -357,9 +356,9 @@ func (g *Generator) Cap() int {
 // Snapshot returns a copy of the Generator's current bookkeeping data.
 func (g *Generator) Snapshot() GeneratorSnapshot {
 	var (
-		wallNow, _ = nanotime()
-		wallHi     = atomic.LoadInt64(g.wallHi)
-		seq        uint32
+		wallNow = g.clock()
+		wallHi  = atomic.LoadInt64(g.wallHi)
+		seq     uint32
 	)
 
 	// Be consistent with g.Sequence() and return seqMin if the next call to New()
@@ -377,8 +376,7 @@ func (g *Generator) Snapshot() GeneratorSnapshot {
 		Sequence:    seq,
 		Now:         wallNow,
 		WallHi:      wallHi,
-		MonoLo:      atomic.LoadInt64(g.monoLo),
-		MonoOffset:  g.monoOffset,
+		WallSafe:    atomic.LoadInt64(g.wallSafe),
 		Drifts:      atomic.LoadUint32(g.drifts),
 	}
 }

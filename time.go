@@ -33,13 +33,12 @@ const (
 //go:linkname now time.now
 func now() (sec int64, nsec int32, mono int64)
 
-// nanotime returns the current wall clock time reported by the OS as adjusted to our internal epoch
-// and the current monotonic clock reading verbatim as reported by the OS.
-func nanotime() (wall int64, mono int64) {
+// nanotime returns the current wall clock time reported by the OS as adjusted to our internal epoch.
+func nanotime() (wall int64) {
 	var (
-		wallNowSec, wallNowNsec, monoNow = now()
-		wallnow                          = (wallNowSec*1e9 + int64(wallNowNsec) - epochNsec) / TimeUnit
+		wallNowSec, wallNowNsec, _ = now()
+		wallnow                    = (wallNowSec*1e9 + int64(wallNowNsec) - epochNsec) / TimeUnit
 	)
 
-	return wallnow, monoNow
+	return wallnow
 }
