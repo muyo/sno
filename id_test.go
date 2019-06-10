@@ -35,7 +35,7 @@ func TestID_Timestamp(t *testing.T) {
 	tn := time.Now()
 	id := New(255)
 
-	expected := tn.UnixNano() / TimeUnit * 4 // Drop precision for the comparison.
+	expected := tn.UnixNano() / TimeUnit * TimeUnit // Drop precision for the comparison.
 	actual := id.Timestamp()
 
 	if actual != expected {

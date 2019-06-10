@@ -16,7 +16,7 @@ go get -u github.com/muyo/sno
 ```
 ### Status
 
-**Not production ready** - spec and API will fluctuate until **a 1.0 tag expected around 2019/08**.
+**Nearing stable** - spec and API *may* fluctuate until **a 1.0 tag expected around 2019/07**.
 
 ### Features
 
@@ -684,12 +684,12 @@ to something which you should (generally) never do*.
 ```
 BenchmarkSnoEncodeVector-8          2000000000               0.85 ns/op           0 B/op          0 allocs/op
 BenchmarkSnoEncodeScalar-8          1000000000               2.21 ns/op           0 B/op          0 allocs/op
-BenchmarkSnoEncodeFallback-8        1000000000               2.66 ns/op           0 B/op          0 allocs/op
+BenchmarkSnoEncodePureGoFallback-8  1000000000               2.66 ns/op           0 B/op          0 allocs/op
 BenchmarkStdLibEncode-8             30000000                12.5 ns/op            0 B/op          0 allocs/op
 
 BenchmarkSnoDecodeVector-8          2000000000               1.02 ns/op           0 B/op          0 allocs/op
 BenchmarkSnoDecodeScalar-8          500000000                2.41 ns/op           0 B/op          0 allocs/op
-BenchmarkSnoDecodeFallback-8        500000000                3.10 ns/op           0 B/op          0 allocs/op
+BenchmarkSnoDecodePureGoFallback-8  500000000                3.10 ns/op           0 B/op          0 allocs/op
 BenchmarkStdLibDecode-8             50000000                31.8 ns/op            0 B/op          0 allocs/op
 ```
 The above forms the baseline. Comparisons below use the vectorized assembly code in sno's case.
