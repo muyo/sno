@@ -8,7 +8,6 @@ const (
 	// Epoch is the offset to the Unix epoch, in seconds, that ID timestamps are embedded with.
 	// 1262304000 is 2010-01-01 00:00:00 UTC
 	Epoch     = 1262304000
-	epochMsec = Epoch * 1e3
 	epochNsec = Epoch * 1e9
 
 	// TimeUnit is the time unit timestamps are embedded with - 4msec, handled as nanoseconds internally.
@@ -36,8 +35,8 @@ func now() (sec int64, nsec int32, mono int64)
 func nanotime() (wall int64) {
 	var (
 		wallNowSec, wallNowNsec, _ = now()
-		wallnow                    = (wallNowSec*1e9 + int64(wallNowNsec) - epochNsec) / TimeUnit
+		wallNow                    = (wallNowSec*1e9 + int64(wallNowNsec) - epochNsec) / TimeUnit
 	)
 
-	return wallnow
+	return wallNow
 }

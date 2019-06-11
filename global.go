@@ -1,6 +1,7 @@
 package sno
 
 import (
+	"sort"
 	"time"
 	"unsafe"
 )
@@ -62,6 +63,17 @@ func FromEncodedString(src string) (id ID, err error) {
 
 	// We only read in the data pointer (and input is read-only), so this does the job.
 	return decode(*(*[]byte)(unsafe.Pointer(&src))), nil
+}
+
+type collection []ID
+
+func (ids collection) Len() int           { return len(ids) }
+func (ids collection) Less(i, j int) bool { return ids[i].Compare(ids[j]) < 0 }
+func (ids collection) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
+
+// Sort performs an in-place lexicographic sort of a slice of sno IDs.
+func Sort(s []ID) {
+	sort.Sort(collection(s))
 }
 
 // Zero returns the zero value of an ID, which is 10 zero bytes and equivalent to:

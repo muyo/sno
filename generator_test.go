@@ -494,10 +494,10 @@ func TestGenerator_NewWithTimeOverflows(t *testing.T) {
 			for i := 0; i < sampleSize; i++ {
 				_ = g.NewWithTime(byte(i), tn)
 			}
-			wg.Wait()
+			wg.Done()
 		}()
 	}
-	wg.Done()
+	wg.Wait()
 }
 
 func TestGenerator_Uniqueness(t *testing.T) {
@@ -744,28 +744,30 @@ func TestGenerator_FromSnapshot_Pool_None(t *testing.T) {
 	}, nil)
 	if err == nil {
 		t.Errorf("expected error, got none")
-	} else {
-		verr, ok := err.(*InvalidSequenceBoundsError)
-		if !ok {
-			t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
-		} else {
-			if verr.Msg != errSequenceBoundsIdenticalMsg {
-				t.Errorf("expected error msg [%s], got [%s]", errSequenceBoundsIdenticalMsg, verr.Msg)
-			}
+		return
+	}
 
-			if verr.Min != bound {
-				t.Errorf("expected [%d], got [%d]", bound, verr.Min)
-			}
+	verr, ok := err.(*InvalidSequenceBoundsError)
+	if !ok {
+		t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
+		return
+	}
 
-			if verr.Max != bound {
-				t.Errorf("expected [%d], got [%d]", bound, verr.Max)
-			}
+	if verr.Msg != errSequenceBoundsIdenticalMsg {
+		t.Errorf("expected error msg [%s], got [%s]", errSequenceBoundsIdenticalMsg, verr.Msg)
+	}
 
-			expectedMsg := fmt.Sprintf(errInvalidSequenceBoundsFmt, errSequenceBoundsIdenticalMsg, bound, 0, bound, 1)
-			if verr.Error() != expectedMsg {
-				t.Errorf("expected error message [%s], got [%s]", expectedMsg, verr.Error())
-			}
-		}
+	if verr.Min != bound {
+		t.Errorf("expected [%d], got [%d]", bound, verr.Min)
+	}
+
+	if verr.Max != bound {
+		t.Errorf("expected [%d], got [%d]", bound, verr.Max)
+	}
+
+	expectedMsg := fmt.Sprintf(errInvalidSequenceBoundsFmt, errSequenceBoundsIdenticalMsg, bound, 0, bound, 1)
+	if verr.Error() != expectedMsg {
+		t.Errorf("expected error msg [%s], got [%s]", expectedMsg, verr.Error())
 	}
 }
 
@@ -780,28 +782,30 @@ func TestGenerator_FromSnapshot_Pool_Size(t *testing.T) {
 	}, nil)
 	if err == nil {
 		t.Errorf("expected error, got none")
-	} else {
-		verr, ok := err.(*InvalidSequenceBoundsError)
-		if !ok {
-			t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
-		} else {
-			if verr.Msg != errSequencePoolTooSmallMsg {
-				t.Errorf("expected error msg [%s], got [%s]", errSequencePoolTooSmallMsg, verr.Msg)
-			}
+		return
+	}
 
-			if verr.Min != seqMin {
-				t.Errorf("expected [%d], got [%d]", seqMin, verr.Min)
-			}
+	verr, ok := err.(*InvalidSequenceBoundsError)
+	if !ok {
+		t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
+		return
+	}
 
-			if verr.Max != seqMax {
-				t.Errorf("expected [%d], got [%d]", seqMax, verr.Max)
-			}
+	if verr.Msg != errSequencePoolTooSmallMsg {
+		t.Errorf("expected error msg [%s], got [%s]", errSequencePoolTooSmallMsg, verr.Msg)
+	}
 
-			expectedMsg := fmt.Sprintf(errInvalidSequenceBoundsFmt, errSequencePoolTooSmallMsg, seqMin, 0, seqMax, seqMax-seqMin+1)
-			if verr.Error() != expectedMsg {
-				t.Errorf("expected error message [%s], got [%s]", expectedMsg, verr.Error())
-			}
-		}
+	if verr.Min != seqMin {
+		t.Errorf("expected [%d], got [%d]", seqMin, verr.Min)
+	}
+
+	if verr.Max != seqMax {
+		t.Errorf("expected [%d], got [%d]", seqMax, verr.Max)
+	}
+
+	expectedMsg := fmt.Sprintf(errInvalidSequenceBoundsFmt, errSequencePoolTooSmallMsg, seqMin, 0, seqMax, seqMax-seqMin+1)
+	if verr.Error() != expectedMsg {
+		t.Errorf("expected error msg [%s], got [%s]", expectedMsg, verr.Error())
 	}
 }
 
@@ -816,28 +820,30 @@ func TestGenerator_FromSnapshot_Underflow(t *testing.T) {
 	}, nil)
 	if err == nil {
 		t.Errorf("expected error, got none")
-	} else {
-		verr, ok := err.(*InvalidSequenceBoundsError)
-		if !ok {
-			t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
-		} else {
-			if verr.Msg != errSequenceUnderflowsBound {
-				t.Errorf("expected error msg [%s], got [%s]", errSequenceUnderflowsBound, verr.Msg)
-			}
+		return
+	}
 
-			if verr.Min != seqMin {
-				t.Errorf("expected [%d], got [%d]", seqMin, verr.Min)
-			}
+	verr, ok := err.(*InvalidSequenceBoundsError)
+	if !ok {
+		t.Errorf("expected error type [%T], got [%T]", &InvalidSequenceBoundsError{}, err)
+		return
+	}
 
-			if verr.Cur != seq {
-				t.Errorf("expected [%d], got [%d]", seq, verr.Cur)
-			}
+	if verr.Msg != errSequenceUnderflowsBound {
+		t.Errorf("expected error msg [%s], got [%s]", errSequenceUnderflowsBound, verr.Msg)
+	}
 
-			expectedMsg := fmt.Sprintf(errInvalidSequenceBoundsFmt, errSequenceUnderflowsBound, seqMin, seq, MaxSequence, MaxSequence-seqMin+1)
-			if verr.Error() != expectedMsg {
-				t.Errorf("expected error message [%s], got [%s]", expectedMsg, verr.Error())
-			}
-		}
+	if verr.Min != seqMin {
+		t.Errorf("expected [%d], got [%d]", seqMin, verr.Min)
+	}
+
+	if verr.Cur != seq {
+		t.Errorf("expected [%d], got [%d]", seq, verr.Cur)
+	}
+
+	expectedMsg := fmt.Sprintf(errInvalidSequenceBoundsFmt, errSequenceUnderflowsBound, seqMin, seq, MaxSequence, MaxSequence-seqMin+1)
+	if verr.Error() != expectedMsg {
+		t.Errorf("expected error msg [%s], got [%s]", expectedMsg, verr.Error())
 	}
 }
 

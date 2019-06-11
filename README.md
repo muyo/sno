@@ -523,23 +523,6 @@ The following alphabet is used:
 
 This is 2 contiguous ASCII ranges: `50..57` (digits) and `97..120` (*strictly* lowercase letters).
 
-The zero value of a **sno** therefore encodes to (spaces added for display):
-
-```
-2222 2222 2222 2222
-```
-
-The maximum possible **sno** (all bytes at 255) encodes to:
-
-```
-xxxx xxxx xxxx xxxx
-```
-
-This somewhat unconventional alphabet was picked to take care of, amongst others:
-- some ambiguities between `1` and `l` (and similar, if uppercase was allowed) without splitting the ranges (which makes validation less involved),
-- `0` and `o` pronounciation (`ohhhh`) when reading them aloud in a customer facing scenario,
-- removal of `0` and `1` makes a visual distinction in large datasets (human brains are good at picking up patterns and nuances in patterns). 
-
 On amd64 the enc/dec steps are vectorized and **extremely cheap** (➜ [Benchmarks](#benchmarks)) if the 
 CPU supports them.
 
