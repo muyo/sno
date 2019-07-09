@@ -1,4 +1,4 @@
-<img src="https://i.vgy.me/V4d9td.png" alt="sno logo" title="sno" align="left"  height="200" />
+<img src="./.github/logo_200x200.png" alt="sno logo" title="sno" align="left"  height="200" />
 
 A spec for **unique IDs in distributed systems** based on the Snowflake design, e.g. a coordination-based ID variant. 
 It aims to be friendly to both machines and humans, compact, *versatile* and fast.
@@ -110,7 +110,7 @@ later when generators are already offline - or for metrics purposes when online.
 
 A **sno** is simply 80-bits comprised of two 40-bit blocks: the **timestamp** and the **payload**. The bytes are 
 stored in **big-endian** order in all representations to retain their sortable property.
-![Layout](https://i.vgy.me/cBJGT6.png)
+![Layout](./.github/layout.png)
 Both blocks can be inspected and mutated independently in either representation. Bits of the components in the binary 
 representation don't spill over into other bytes which means no additional bit twiddling voodoo is necessary* to extract 
 them.
@@ -128,8 +128,8 @@ unsigned) and one bit, the LSB of the entire block - for the tick-tock toggle.
 
 ### Epoch
 
-The **epoch is custom** and **constant**. It is bounded within **2010-01-01 00:00:00 UTC** and 
-**2079-09-07 15:47:35.548 UTC**. The lower bound is `1262304000` seconds relative to Unix. 
+The **epoch is custom** and **constant**. It is bounded within `2010-01-01 00:00:00 UTC` and 
+`2079-09-07 15:47:35.548 UTC`. The lower bound is `1262304000` seconds relative to Unix. 
 
 If you *really* have to break out of the epoch - or want to store higher precision - the metabyte is your friend.
 
@@ -543,7 +543,7 @@ CPU supports them.
 | **sno**     |  10 bytes   |   16 chars    | :white_check_mark: | :x:                | :white_check_mark:
 | [Snowflake] |   8 bytes   | <=20 chars    | :white_check_mark: | :x:                | :x:
 
-All of the above link to Go implementations based on popularity (GH stars) or via listings in specs.
+All of the above link to Go implementations based on popularity (GH stars) or per recommended implementations in specs.
 
 [UUID]: https://github.com/satori/go.uuid
 [KSUID]: https://github.com/segmentio/ksuid
@@ -660,9 +660,6 @@ the Nebuchadnezzar look like a child's toy box (ops are people too!).
 
 
 ### Encoding/decoding
-
-Considering the above, the only other benchmark the author felt worth including is also *mostly due 
-to something which you should (generally) never do*.
 
 ```
 BenchmarkSnoEncodeVector-8          2000000000               0.85 ns/op           0 B/op          0 allocs/op

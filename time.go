@@ -10,7 +10,7 @@ const (
 	Epoch     = 1262304000
 	epochNsec = Epoch * 1e9
 
-	// TimeUnit is the time unit timestamps are embedded with - 4msec, handled as nanoseconds internally.
+	// TimeUnit is the time unit timestamps are embedded with - 4msec.
 	TimeUnit = 4e6
 
 	// MaxTimestamp is the max number of time units that can be embedded in an ID's timestamp.
