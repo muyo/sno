@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/muyo/sno"
+	"github.com/azhai/sno"
 )
 
 const inspectFmt = `

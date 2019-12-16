@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/muyo/rush/chars"
-	"github.com/muyo/sno"
+	"github.com/azhai/sno"
 )
 
 func generate(in string) {
