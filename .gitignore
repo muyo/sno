@@ -1,0 +1,15 @@
+.*
+*/*.so
+*/*.so.*
+*.bak
+*.exe
+*.lock
+*.log
+*.log.*
+*.sublime-project
+*.sublime-workspace
+*.tmp
+*.txt
+*.upx
+*.vscode
+vendor/

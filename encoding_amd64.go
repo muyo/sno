@@ -17,7 +17,8 @@ var hasVectorSupport = func() bool {
 	mfi, _, _, _ := cpuId(0)
 
 	// Need an mfi of at least 7 since we need to check for BMI2 support as well.
-	if mfi < 7 {
+	// Intel(R) Core(TM) i5-9600K CPU got 0, 0, 0, 0
+	if mfi < 7 && mfi > 0 {
 		if mfi < 1 {
 			// We don't even have basic sets.
 			panic(cpuLacksSSE2ErrMsg)
@@ -26,26 +27,26 @@ var hasVectorSupport = func() bool {
 		return false
 	}
 
-	_, _, c, d := cpuId(1)
+	_, _, ecx, edx := cpuId(1)
 	// The fallbacks currently rely on SSE2 - while it's available on just about
 	// any modern AMD64 platform, *just in case* it's not, fail loudly and immediately
 	// instead of faulting on first encode/decode attempt.
-	if (d & (1 << 26)) == 0 {
+	if (edx & (1 << 26)) == 0 {
 		panic(cpuLacksSSE2ErrMsg)
 	}
 
-	// c & 0x00000001 -> SSE3
-	// c & 0x00000200 -> SSSE3
-	// c & 0x00080000 -> SSE4
-	// c & 0x00100000 -> SSE4.2
-	if (c & 0x00180201) == 0 {
+	// ecx & 0x00000001 -> SSE3
+	// ecx & 0x00000200 -> SSSE3
+	// ecx & 0x00080000 -> SSE4
+	// ecx & 0x00100000 -> SSE4.2
+	if (ecx & 0x00180201) == 0 {
 		return false
 	}
 
-	// e & 0x00000008 -> BMI1
-	// e & 0x00000100 -> BMI2
-	_, e, _, _ := cpuId(7)
-	if (e & 0x00000108) == 0 {
+	// ebx & 0x00000008 -> BMI1
+	// ebx & 0x00000100 -> BMI2
+	_, ebx, _, _ := cpuId(7)
+	if (ebx & 0x00000108) == 0 {
 		return false
 	}
 
