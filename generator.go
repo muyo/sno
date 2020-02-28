@@ -106,7 +106,7 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		}
 	}
 
-	seq := uint32(snapshot.Sequence)
+	seq := snapshot.Sequence
 	// Offset by -1 because we start 0-indexed, while AddUint gets called first in NewWithTime()
 	// and unlike New(), NewWithTime() has no time progression branch that would catch the first
 	// generation and reset the sequence along with time.

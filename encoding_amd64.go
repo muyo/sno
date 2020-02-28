@@ -45,9 +45,6 @@ var hasVectorSupport = func() bool {
 	// e & 0x00000008 -> BMI1
 	// e & 0x00000100 -> BMI2
 	_, e, _, _ := cpuId(7)
-	if (e & 0x00000108) == 0 {
-		return false
-	}
 
-	return true
+	return (e & 0x00000108) != 0
 }()

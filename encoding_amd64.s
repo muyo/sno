@@ -262,7 +262,7 @@ decodeFallback:
     RET
 
 
-// func cpuId(op uint32) (eax, ebx, ecx, edx uint32)
+// func cpuId(op uint8) (eax, ebx, ecx, edx uint32)
 TEXT ·cpuId(SB), NOSPLIT, $16-24
     XORQ CX, CX
     MOVB op+0(FP), AX

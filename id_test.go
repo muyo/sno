@@ -113,7 +113,7 @@ func TestID_MarshalText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(actual, expected) != 0 {
+	if !bytes.Equal(actual, expected) {
 		t.Errorf("expected [%s], got [%s]", expected, actual)
 	}
 }
@@ -149,7 +149,7 @@ func TestID_MarshalJSON_Valid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(actual, expected) != 0 {
+	if !bytes.Equal(actual, expected) {
 		t.Errorf("expected [%s], got [%s]", expected, actual)
 	}
 }
@@ -162,7 +162,7 @@ func TestID_MarshalJSON_Null(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(actual, expected) != 0 {
+	if !bytes.Equal(actual, expected) {
 		t.Errorf("expected [%s], got [%s]", expected, actual)
 	}
 }
@@ -208,7 +208,6 @@ func TestID_UnmarshalJSON_Null(t *testing.T) {
 
 func TestID_IsZero(t *testing.T) {
 	for _, c := range []struct {
-		name string
 		id   ID
 		want bool
 	}{

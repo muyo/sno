@@ -92,7 +92,7 @@ func TestGlobal_FromBinaryBytes_Invalid(t *testing.T) {
 		{12, true},
 		{16, true},
 	} {
-		b := make([]byte, c.n, c.n)
+		b := make([]byte, c.n)
 		_, err := FromBinaryBytes(b)
 
 		if actual, expected := err != nil, c.invalid; actual != expected {
