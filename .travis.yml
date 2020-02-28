@@ -1,8 +1,9 @@
 language: go
 
 go:
-  - "1.11"
   - "1.12"
+  - "1.13"
+  - "1.14"
   - "master"
 
 matrix:
@@ -11,7 +12,6 @@ matrix:
   fast_finish: true
 
 script:
-  - go vet ./...
   - go test -v -tags=test -race -coverprofile=coverage.txt -covermode=atomic ./...
 
 after_success:

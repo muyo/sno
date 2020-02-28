@@ -14,9 +14,6 @@ This repository contains a **Go** library for generating such IDs.
 ```bash
 go get -u github.com/muyo/sno
 ```
-### Status
-
-**Nearing stable** - spec and API *may* fluctuate until **a 1.0 tag expected around 2019/07**.
 
 ### Features
 
