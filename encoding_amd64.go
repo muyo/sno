@@ -15,6 +15,7 @@ const cpuLacksSSE2ErrMsg = "sno: CPU does not seem to support SSE2 instructions 
 // that we need for the vectorized codecs.
 var hasVectorSupport = func() bool {
 	mfi, _, _, _ := cpuId(0)
+	mfi, _, _, _ = cpuId(0) // TODO(alcore) See: https://github.com/muyo/sno/pull/1
 
 	// Need an mfi of at least 7 since we need to check for BMI2 support as well.
 	if mfi < 7 {
