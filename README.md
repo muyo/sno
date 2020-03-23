@@ -5,7 +5,8 @@ It aims to be friendly to both machines and humans, compact, *versatile* and fas
 
 This repository contains a **Go** library for generating such IDs. 
 
-[![GoDoc](https://img.shields.io/badge/godoc-reference-00a1fe.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) 
+[![GoDoc](https://img.shields.io/badge/godoc-reference-00a1fe.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fmuyo%2Fsno.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fmuyo%2Fsno?ref=badge_shield)
+
 [![Travis build: master](https://img.shields.io/travis/muyo/sno/master.svg?logo=travis&style=flat-square)](https://travis-ci.org/muyo/sno) 
 [![Coverage](https://img.shields.io/codecov/c/github/muyo/sno.svg?logo=codecov&style=flat-square)](https://codecov.io/gh/muyo/sno)
 [![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno?style=flat-square)](https://goreportcard.com/report/github.com/muyo/sno) 
@@ -726,3 +727,6 @@ introduces are unfortunately incompatible with xid's spec.
 Also potentially of interest:
 - [Lamport timestamps](https://en.wikipedia.org/wiki/Lamport_timestamps) (vector/logical clocks)
 - [The Bloom Clock](https://arxiv.org/pdf/1905.13064.pdf) by Lum Ramabaja
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fmuyo%2Fsno.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fmuyo%2Fsno?ref=badge_large)
