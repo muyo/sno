@@ -3,6 +3,7 @@ package sno
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -382,11 +383,20 @@ func (g *Generator) Snapshot() GeneratorSnapshot {
 }
 
 func (g *Generator) applyTimestamp(id *ID, units int64) {
-	id[0] = byte(units >> 31)
-	id[1] = byte(units >> 23)
-	id[2] = byte(units >> 15)
-	id[3] = byte(units >> 7)
-	id[4] = byte(units << 1)
+	// Equivalent of...
+	//
+	//	id[0] = byte(units >> 31)
+	//	id[1] = byte(units >> 23)
+	//	id[2] = byte(units >> 15)
+	//	id[3] = byte(units >> 7)
+	//	id[4] = byte(units << 1)
+	//
+	// ... and slightly wasteful as we're storing 3 bytes that will get overwritten
+	// via applyPartition but unlike the code above, the calls to binary.BigEndian.PutUintXX()
+	// are compiler assisted and boil down to essentially a load + shift + bswap (+ a nop due
+	// to midstack inlining), which we prefer over the roughly 16 instructions otherwise.
+	// If applyTimestamp() was implemented straight in assembly, we'd not get it inline.
+	binary.BigEndian.PutUint64(id[:], uint64(units<<25))
 }
 
 func (g *Generator) applyTickTock(id *ID, counter uint32) {
