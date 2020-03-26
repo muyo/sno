@@ -32,11 +32,8 @@ const (
 func now() (sec int64, nsec int32, mono int64)
 
 // nanotime returns the current wall clock time reported by the OS as adjusted to our internal epoch.
-func nanotime() (wall int64) {
-	var (
-		wallNowSec, wallNowNsec, _ = now()
-		wallNow                    = (wallNowSec*1e9 + int64(wallNowNsec) - epochNsec) / TimeUnit
-	)
+func nanotime() uint64 {
+	wallSec, wallNsec, _ := now()
 
-	return wallNow
+	return (uint64(wallSec)*1e9 + uint64(wallNsec) - epochNsec) / TimeUnit
 }

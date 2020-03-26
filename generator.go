@@ -62,11 +62,11 @@ type SequenceOverflowNotification struct {
 // Generator is responsible for generating new IDs scoped to a given fixed Partition and
 // managing their sequence.
 type Generator struct {
-	partition Partition // Immutable.
+	partition uint32 // Immutable.
 
 	drifts     *uint32     // Uses the LSB for the tick-tock and serves as a counter.
-	wallHi     *int64      //
-	wallSafe   *int64      //
+	wallHi     *uint64     //
+	wallSafe   *uint64     //
 	regression *sync.Mutex // Regression branch lock.
 
 	seq       *uint32
@@ -79,7 +79,7 @@ type Generator struct {
 	seqOverflowCount  uint32 // Behind seqOverflowCond lock.
 	seqOverflowChan   chan<- *SequenceOverflowNotification
 
-	clock func() (wall int64)
+	clock func() uint64
 }
 
 // NewGenerator returns a new generator based on the optional Snapshot.
@@ -96,14 +96,19 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		return nil, err
 	}
 
-	if snapshot.WallSafe != 0 {
+	var (
+		wallHi   = uint64(snapshot.WallHi)
+		wallSafe = uint64(snapshot.WallSafe)
+	)
+
+	if wallSafe != 0 {
 		wallNow := nanotime()
 		// Since we can't currently infer whether it'd be safe to simply resume (e.g. whether
 		// the snapshot got taken during a simple drift - a single regression, or while contenders
 		// were sleeping during a multi-regression), we take the safe route out and set wallHi so
 		// that the multi-regression branch will get triggered until WallSafe.
-		if snapshot.WallSafe > wallNow {
-			snapshot.WallHi = wallNow
+		if wallSafe > wallNow {
+			wallHi = wallNow
 		}
 	}
 
@@ -114,7 +119,7 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 	seqStatic := uint32(snapshot.SequenceMin - 1)
 
 	return &Generator{
-		partition:       snapshot.Partition,
+		partition:       partitionToInternalRepr(snapshot.Partition),
 		seq:             &seq,
 		seqMin:          uint32(snapshot.SequenceMin),
 		seqMax:          uint32(snapshot.SequenceMax),
@@ -122,8 +127,8 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
 		seqOverflowChan: c,
 		drifts:          &snapshot.Drifts,
-		wallHi:          &snapshot.WallHi,
-		wallSafe:        &snapshot.WallSafe,
+		wallHi:          &wallHi,
+		wallSafe:        &wallSafe,
 		regression:      &sync.Mutex{},
 		clock:           nanotime,
 	}, nil
@@ -142,7 +147,7 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 	seqStatic := ^uint32(0) // Offset to -1, see note in newGeneratorFromSnapshot
 
 	return &Generator{
-		partition:       p,
+		partition:       partitionToInternalRepr(p),
 		seq:             new(uint32),
 		seqMin:          0,
 		seqMax:          MaxSequence,
@@ -150,8 +155,8 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
 		seqOverflowChan: c,
 		drifts:          new(uint32),
-		wallHi:          new(int64),
-		wallSafe:        new(int64),
+		wallHi:          new(uint64),
+		wallSafe:        new(uint64),
 		regression:      &sync.Mutex{},
 		clock:           nanotime,
 	}, nil
@@ -161,7 +166,7 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 func (g *Generator) New(meta byte) (id ID) {
 	var (
 		// Note: Single load of wallHi for the evaluations is correct (as wallNow is static).
-		wallHi  = atomic.LoadInt64(g.wallHi)
+		wallHi  = atomic.LoadUint64(g.wallHi)
 		wallNow = g.clock()
 	)
 
@@ -170,10 +175,8 @@ func (g *Generator) New(meta byte) (id ID) {
 		seq := atomic.AddUint32(g.seq, 1)
 
 		if g.seqMax >= seq {
-			g.applyTimestamp(&id, wallNow)
-			g.applyTickTock(&id, atomic.LoadUint32(g.drifts))
-			g.applyPartition(&id, meta)
-			g.applySequence(&id, seq)
+			g.applyTimestamp(&id, wallNow, atomic.LoadUint32(g.drifts)&1)
+			g.applyPayload(&id, meta, seq)
 
 			return
 		}
@@ -212,13 +215,11 @@ func (g *Generator) New(meta byte) (id ID) {
 	}
 
 	// Time progression branch.
-	if wallNow > wallHi && atomic.CompareAndSwapInt64(g.wallHi, wallHi, wallNow) {
+	if wallNow > wallHi && atomic.CompareAndSwapUint64(g.wallHi, wallHi, wallNow) {
 		atomic.StoreUint32(g.seq, g.seqMin)
 
-		g.applyTimestamp(&id, wallNow)
-		g.applyTickTock(&id, atomic.LoadUint32(g.drifts))
-		g.applyPartition(&id, meta)
-		g.applySequence(&id, g.seqMin)
+		g.applyTimestamp(&id, wallNow, atomic.LoadUint32(g.drifts)&1)
+		g.applyPayload(&id, meta, g.seqMin)
 
 		return
 	}
@@ -227,7 +228,7 @@ func (g *Generator) New(meta byte) (id ID) {
 	g.regression.Lock()
 
 	// Check-again. It's possible that another thread applied the drift while we were spinning (if we were).
-	if wallHi = atomic.LoadInt64(g.wallHi); wallNow >= wallHi {
+	if wallHi = atomic.LoadUint64(g.wallHi); wallNow >= wallHi {
 		g.regression.Unlock()
 
 		return g.New(meta)
@@ -240,14 +241,12 @@ func (g *Generator) New(meta byte) (id ID) {
 		// gets applied, which is when it regresses). In contrast, wallSafe only ever gets updated when
 		// a drift gets applied and always gets set to the highest time recorded, meaning it
 		// increases monotonically.
-		atomic.StoreInt64(g.wallSafe, wallHi)
-		atomic.StoreInt64(g.wallHi, wallNow)
+		atomic.StoreUint64(g.wallSafe, wallHi)
+		atomic.StoreUint64(g.wallHi, wallNow)
 		atomic.StoreUint32(g.seq, g.seqMin)
 
-		g.applyTimestamp(&id, wallNow)
-		g.applyTickTock(&id, atomic.AddUint32(g.drifts, 1))
-		g.applyPartition(&id, meta)
-		g.applySequence(&id, g.seqMin)
+		g.applyTimestamp(&id, wallNow, atomic.AddUint32(g.drifts, 1)&1)
+		g.applyPayload(&id, meta, g.seqMin)
 
 		g.regression.Unlock()
 
@@ -289,16 +288,15 @@ func (g *Generator) NewWithTime(meta byte, t time.Time) (id ID) {
 		seq = g.seqMin
 	}
 
-	g.applyTimestamp(&id, (t.UnixNano()-epochNsec)/TimeUnit)
-	g.applyPartition(&id, meta)
-	g.applySequence(&id, seq)
+	g.applyTimestamp(&id, uint64(t.UnixNano()-epochNsec)/TimeUnit, 0)
+	g.applyPayload(&id, meta, seq)
 
 	return
 }
 
 // Partition returns the fixed identifier of the Generator.
 func (g *Generator) Partition() Partition {
-	return g.partition
+	return partitionToPublicRepr(g.partition)
 }
 
 // Sequence returns the current sequence the Generator is at.
@@ -314,7 +312,7 @@ func (g *Generator) Partition() Partition {
 // determine the current overflow via:
 //	overflow := int(uint32(generator.SequenceMax()) - generator.Sequence())
 func (g *Generator) Sequence() uint32 {
-	if wallNow := g.clock(); wallNow == atomic.LoadInt64(g.wallHi) {
+	if wallNow := g.clock(); wallNow == atomic.LoadUint64(g.wallHi) {
 		return atomic.LoadUint32(g.seq)
 	}
 
@@ -333,7 +331,7 @@ func (g *Generator) SequenceMax() uint16 {
 
 // Len returns the number of IDs generated in the current timeframe.
 func (g *Generator) Len() int {
-	if wallNow := g.clock(); wallNow == atomic.LoadInt64(g.wallHi) {
+	if wallNow := g.clock(); wallNow == atomic.LoadUint64(g.wallHi) {
 		if seq := atomic.LoadUint32(g.seq); g.seqMax > seq {
 			return int(seq-g.seqMin) + 1
 		}
@@ -358,7 +356,7 @@ func (g *Generator) Cap() int {
 func (g *Generator) Snapshot() GeneratorSnapshot {
 	var (
 		wallNow = g.clock()
-		wallHi  = atomic.LoadInt64(g.wallHi)
+		wallHi  = atomic.LoadUint64(g.wallHi)
 		seq     uint32
 	)
 
@@ -371,47 +369,37 @@ func (g *Generator) Snapshot() GeneratorSnapshot {
 	}
 
 	return GeneratorSnapshot{
-		Partition:   g.partition,
+		Partition:   partitionToPublicRepr(g.partition),
 		SequenceMin: uint16(g.seqMin),
 		SequenceMax: uint16(g.seqMax),
 		Sequence:    seq,
-		Now:         wallNow,
-		WallHi:      wallHi,
-		WallSafe:    atomic.LoadInt64(g.wallSafe),
+		Now:         int64(wallNow),
+		WallHi:      int64(wallHi),
+		WallSafe:    int64(atomic.LoadUint64(g.wallSafe)),
 		Drifts:      atomic.LoadUint32(g.drifts),
 	}
 }
 
-func (g *Generator) applyTimestamp(id *ID, units int64) {
-	// Equivalent of...
+func (g *Generator) applyTimestamp(id *ID, units uint64, tick uint32) {
+	// Equivalent to...
 	//
 	//	id[0] = byte(units >> 31)
 	//	id[1] = byte(units >> 23)
 	//	id[2] = byte(units >> 15)
 	//	id[3] = byte(units >> 7)
-	//	id[4] = byte(units << 1)
+	//	id[4] = byte(units << 1) | byte(tick)
 	//
 	// ... and slightly wasteful as we're storing 3 bytes that will get overwritten
 	// via applyPartition but unlike the code above, the calls to binary.BigEndian.PutUintXX()
 	// are compiler assisted and boil down to essentially a load + shift + bswap (+ a nop due
 	// to midstack inlining), which we prefer over the roughly 16 instructions otherwise.
 	// If applyTimestamp() was implemented straight in assembly, we'd not get it inline.
-	binary.BigEndian.PutUint64(id[:], uint64(units<<25))
+	binary.BigEndian.PutUint64(id[:], units<<25|uint64(tick)<<24)
 }
 
-func (g *Generator) applyTickTock(id *ID, counter uint32) {
-	id[4] |= byte(counter & 1)
-}
-
-func (g *Generator) applyPartition(id *ID, meta byte) {
+func (g *Generator) applyPayload(id *ID, meta byte, seq uint32) {
 	id[5] = meta
-	id[6] = g.partition[0]
-	id[7] = g.partition[1]
-}
-
-func (g *Generator) applySequence(id *ID, seq uint32) {
-	id[8] = byte(seq >> 8)
-	id[9] = byte(seq)
+	binary.BigEndian.PutUint32(id[6:], g.partition|seq)
 }
 
 func (g *Generator) seqOverflowLoop() {
@@ -469,8 +457,8 @@ func (g *Generator) seqOverflowLoop() {
 		// Handles an edge case where we've got calls locked on an overflow and suddenly no more
 		// calls to New() come in, meaning there's no one to actually reset the sequence.
 		var (
-			wallNow = (t.UnixNano() - epochNsec) / TimeUnit
-			wallHi  = atomic.LoadInt64(g.wallHi)
+			wallNow = uint64(t.UnixNano()-epochNsec) / TimeUnit
+			wallHi  = atomic.LoadUint64(g.wallHi)
 		)
 
 		if wallNow > wallHi {
@@ -488,6 +476,14 @@ func genPartition() (p Partition, err error) {
 	}
 
 	return
+}
+
+func partitionToInternalRepr(p Partition) uint32 {
+	return uint32(p[0])<<24 | uint32(p[1])<<16
+}
+
+func partitionToPublicRepr(p uint32) Partition {
+	return Partition{byte(p >> 24), byte(p >> 16)}
 }
 
 func sanitizeSnapshotBounds(s *GeneratorSnapshot) error {

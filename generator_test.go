@@ -163,8 +163,8 @@ func TestGenerator_NewOverflows(t *testing.T) {
 }
 
 var (
-	staticWallNow *int64
-	staticInc     = new(int64)
+	staticWallNow *uint64
+	staticInc     = new(uint64)
 )
 
 func init() {
@@ -172,14 +172,14 @@ func init() {
 	staticWallNow = &wall
 }
 
-func staticTime() int64 {
-	return atomic.LoadInt64(staticWallNow)
+func staticTime() uint64 {
+	return atomic.LoadUint64(staticWallNow)
 }
 
-func staticIncTime() int64 {
-	wall := atomic.LoadInt64(staticWallNow) + atomic.LoadInt64(staticInc)*TimeUnit
+func staticIncTime() uint64 {
+	wall := atomic.LoadUint64(staticWallNow) + atomic.LoadUint64(staticInc)*TimeUnit
 
-	atomic.AddInt64(staticInc, 1)
+	atomic.AddUint64(staticInc, 1)
 
 	return wall
 }
@@ -216,7 +216,7 @@ func testGeneratorNewTickTocksTick(g *Generator, ids []ID) func(*testing.T) {
 		}
 
 		wall := nanotime()
-		atomic.StoreInt64(staticWallNow, wall-TimeUnit)
+		atomic.StoreUint64(staticWallNow, wall-TimeUnit)
 
 		// Swap out the time source. Next batch is supposed to set a drift, have their tick-tock bit
 		// set to 1, and wallSafe on the generator must be set accordingly.
@@ -226,8 +226,8 @@ func testGeneratorNewTickTocksTick(g *Generator, ids []ID) func(*testing.T) {
 			t.Errorf("expected [0] drifts recorded, got [%d]", atomic.LoadUint32(g.drifts))
 		}
 
-		if atomic.LoadInt64(g.wallSafe) != 0 {
-			t.Errorf("expected wallSafe to be [0], is [%d]", atomic.LoadInt64(g.wallSafe))
+		if atomic.LoadUint64(g.wallSafe) != 0 {
+			t.Errorf("expected wallSafe to be [0], is [%d]", atomic.LoadUint64(g.wallSafe))
 		}
 
 		for j := 512; j < 1024; j++ {
@@ -238,8 +238,8 @@ func testGeneratorNewTickTocksTick(g *Generator, ids []ID) func(*testing.T) {
 			t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(g.drifts))
 		}
 
-		if atomic.LoadInt64(g.wallSafe) == atomic.LoadInt64(staticWallNow) {
-			t.Errorf("expected wallSafe to be [%d], was [%d]", atomic.LoadInt64(staticWallNow), atomic.LoadInt64(g.wallSafe))
+		if atomic.LoadUint64(g.wallSafe) == atomic.LoadUint64(staticWallNow) {
+			t.Errorf("expected wallSafe to be [%d], was [%d]", atomic.LoadUint64(staticWallNow), atomic.LoadUint64(g.wallSafe))
 		}
 
 		for i := 0; i < 512; i++ {
@@ -259,7 +259,7 @@ func testGeneratorNewTickTocksTick(g *Generator, ids []ID) func(*testing.T) {
 func testGeneratorNewTickTocksSafetySlumber(g *Generator, ids []ID) func(*testing.T) {
 	return func(t *testing.T) {
 		// Multi-regression, checking on a single goroutine.
-		atomic.AddInt64(staticWallNow, -TimeUnit)
+		atomic.AddUint64(staticWallNow, ^uint64(TimeUnit-1))
 
 		// Use a clock where the first call will return the static clock times
 		// but subsequent calls will return higher times. Since we didn't adjust the mono clock
@@ -276,12 +276,14 @@ func testGeneratorNewTickTocksSafetySlumber(g *Generator, ids []ID) func(*testin
 		}
 		_, _, mono2 := now()
 
+		monoDiff := mono2 - mono1
+
 		// We had 2 regressions by 1 TimeUnit each, so sleep duration should've been roughly
 		// the same since time was static (got incremented only after the sleep).
-		if mono2-mono1 < 2*TimeUnit {
-			t.Errorf("expected to sleep for at least [%f]ns, took [%d] instead", 2*TimeUnit, mono2-mono1)
-		} else if mono2-mono1 > 3*TimeUnit {
-			t.Errorf("expected to sleep for no more than [%f]ns, took [%d] instead", 3*TimeUnit, mono2-mono1)
+		if monoDiff < 2*TimeUnit {
+			t.Errorf("expected to sleep for at least [%f]ns, took [%d] instead", 2*TimeUnit, monoDiff)
+		} else if monoDiff > 3*TimeUnit {
+			t.Errorf("expected to sleep for no more than [%f]ns, took [%d] instead", 3*TimeUnit, monoDiff)
 		}
 
 		if atomic.LoadUint32(g.drifts) != 1 {
@@ -295,14 +297,14 @@ func testGeneratorNewTickTocksTock(g *Generator, ids []ID) func(*testing.T) {
 		// At this point we are going to simulate another drift, somewhere in the 'far' future,
 		// with parallel load.
 		g.clock = staticTime
-		atomic.AddInt64(staticWallNow, 100*TimeUnit)
+		atomic.AddUint64(staticWallNow, 100*TimeUnit)
 
 		g.New(255) // Updates wallHi
 
 		// Regress again. Not adjusting mono clock - calls below are supposed to simply drift - drift
 		// count is supposed to end at 2 (since we're still using the same generator) and tick-tock
 		// bit is supposed to be unset.
-		atomic.AddInt64(staticWallNow, -2*TimeUnit)
+		atomic.AddUint64(staticWallNow, ^uint64(2*TimeUnit-1))
 
 		var (
 			batchCount = 4
@@ -338,9 +340,9 @@ func testGeneratorNewTickTocksTock(g *Generator, ids []ID) func(*testing.T) {
 func testGeneratorNewTickTocksRace(g *Generator, ids []ID) func(*testing.T) {
 	return func(*testing.T) {
 		g.clock = staticTime
-		atomic.AddInt64(staticWallNow, 100*TimeUnit)
+		atomic.AddUint64(staticWallNow, 100*TimeUnit)
 		g.New(255)
-		atomic.AddInt64(staticWallNow, -TimeUnit)
+		atomic.AddUint64(staticWallNow, ^uint64(TimeUnit-1))
 
 		var (
 			wgOuter sync.WaitGroup
@@ -374,11 +376,11 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 	// Reset the static clock.
 	g.clock = staticTime
 	wall := nanotime()
-	atomic.StoreInt64(staticWallNow, wall)
+	atomic.StoreUint64(staticWallNow, wall)
 
 	// Simulate a regression.
 	g.New(255)
-	atomic.AddInt64(staticWallNow, -TimeUnit)
+	atomic.AddUint64(staticWallNow, ^uint64(TimeUnit-1))
 	g.New(255)
 
 	snapshot := g.Snapshot()
@@ -387,24 +389,24 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if snapshot.WallSafe != atomic.LoadInt64(g.wallSafe) {
-		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadInt64(g.wallSafe))
+	if uint64(snapshot.WallSafe) != atomic.LoadUint64(g.wallSafe) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(g.wallSafe))
 	}
 
-	if snapshot.WallHi != atomic.LoadInt64(g.wallHi) {
-		t.Errorf("expected [%d], got [%d]", snapshot.WallHi, atomic.LoadInt64(g.wallHi))
+	if uint64(snapshot.WallHi) != atomic.LoadUint64(g.wallHi) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallHi, atomic.LoadUint64(g.wallHi))
 	}
 
 	// Second test, with a snapshot taken "in the future" (relative to current wall clock time).
 	wall = nanotime()
 	g.clock = staticTime
-	atomic.StoreInt64(staticWallNow, wall+100*TimeUnit)
+	atomic.StoreUint64(staticWallNow, wall+100*TimeUnit)
 
 	// Simulate another regression. Takes place in the future - we are going to take a snapshot
 	// and create a generator using that snapshot, where the generator will use nanotime (current time)
 	// as comparison and is supposed to handle this as if it is in the past relative to the snapshot.
 	g.New(255)
-	atomic.AddInt64(staticWallNow, -TimeUnit)
+	atomic.AddUint64(staticWallNow, ^uint64(TimeUnit-1))
 	g.New(255)
 
 	snapshot = g.Snapshot()
@@ -413,12 +415,12 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if snapshot.WallSafe != atomic.LoadInt64(g.wallSafe) {
-		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadInt64(g.wallSafe))
+	if uint64(snapshot.WallSafe) != atomic.LoadUint64(g.wallSafe) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(g.wallSafe))
 	}
 
-	if atomic.LoadInt64(g.wallHi) != wall {
-		t.Errorf("expected [%d], got [%d]", wall, atomic.LoadInt64(g.wallHi))
+	if atomic.LoadUint64(g.wallHi) != wall {
+		t.Errorf("expected [%d], got [%d]", wall, atomic.LoadUint64(g.wallHi))
 	}
 }
 
@@ -878,11 +880,11 @@ func TestGenerator_Snapshot(t *testing.T) {
 	g.New(255)
 	actual = g.Snapshot()
 
-	if actual.Now != wallNow {
+	if uint64(actual.Now) != wallNow {
 		t.Errorf("expected [%d], got [%d]", wallNow, actual.Now)
 	}
 
-	if actual.WallHi != wallNow {
+	if uint64(actual.WallHi) != wallNow {
 		t.Errorf("expected [%d], got [%d]", wallNow, actual.WallHi)
 	}
 

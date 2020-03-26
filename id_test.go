@@ -61,7 +61,7 @@ func TestID_Meta(t *testing.T) {
 }
 
 func TestID_Partition(t *testing.T) {
-	expected := generator.partition
+	expected := generator.Partition()
 	actual := generator.New(255).Partition()
 
 	if actual != expected {
