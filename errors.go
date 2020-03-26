@@ -12,14 +12,11 @@ const (
 	errPartitionPoolExhaustedMsg  = "sno: process exceeded maximum number of possible defaults-configured generators"
 )
 
-var (
-	errInvalidDataSize        = &InvalidDataSizeError{}
-	errPartitionPoolExhausted = &PartitionPoolExhaustedError{}
-)
-
 // InvalidDataSizeError gets returned when attempting to unmarshal or decode an ID from data that
 // is not nil and not of a size of: SizeBinary, SizeEncoded nor 0.
-type InvalidDataSizeError struct{}
+type InvalidDataSizeError struct {
+	Size int
+}
 
 func (e *InvalidDataSizeError) Error() string { return errInvalidDataSizeMsg }
 

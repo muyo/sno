@@ -60,7 +60,7 @@ func FromEncodedBytes(src []byte) (id ID, err error) {
 // The string must have a length of 16. Returns a InvalidDataSizeError if it does not.
 func FromEncodedString(src string) (id ID, err error) {
 	if len(src) != SizeEncoded {
-		return zero, errInvalidDataSize
+		return zero, &InvalidDataSizeError{Size: len(src)}
 	}
 
 	// We only read in the data pointer (and input is read-only), so this does the job.

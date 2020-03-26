@@ -505,7 +505,7 @@ func genPartition() (uint32, error) {
 	n := atomic.AddUint32(&gen, 1)
 
 	if n > maxPartition {
-		return 0, errPartitionPoolExhausted
+		return 0, &PartitionPoolExhaustedError{}
 	}
 
 	// Convert to our internal representation leaving 2 bytes empty

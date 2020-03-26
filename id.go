@@ -97,7 +97,7 @@ func (id ID) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary implements encoding.BinaryUnmarshaler by copying src into the receiver.
 func (id *ID) UnmarshalBinary(src []byte) error {
 	if len(src) != SizeBinary {
-		return errInvalidDataSize
+		return &InvalidDataSizeError{Size: len(src)}
 	}
 
 	copy(id[:], src)
@@ -117,7 +117,7 @@ func (id ID) MarshalText() ([]byte, error) {
 // of the ID from src into the receiver.
 func (id *ID) UnmarshalText(src []byte) error {
 	if len(src) != SizeEncoded {
-		return errInvalidDataSize
+		return &InvalidDataSizeError{Size: len(src)}
 	}
 
 	*id = decode(src)
@@ -162,7 +162,7 @@ func (id *ID) UnmarshalJSON(src []byte) error {
 			return nil
 		}
 
-		return errInvalidDataSize
+		return &InvalidDataSizeError{Size: n}
 	}
 
 	*id = decode(src[1 : n-1])
@@ -227,7 +227,7 @@ func (id *ID) Scan(value interface{}) error {
 			*id = zero
 		default:
 			*id = zero
-			return errInvalidDataSize
+			return &InvalidDataSizeError{Size: len(v)}
 		}
 
 	case string:
@@ -238,14 +238,14 @@ func (id *ID) Scan(value interface{}) error {
 			*id = zero
 		default:
 			*id = zero
-			return errInvalidDataSize
+			return &InvalidDataSizeError{Size: len(v)}
 		}
 
 	case nil:
 		*id = zero
 
 	default:
-		return &InvalidTypeError{value}
+		return &InvalidTypeError{Value: value}
 	}
 
 	return nil

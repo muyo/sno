@@ -135,8 +135,8 @@ func TestID_UnmarshalText_Invalid(t *testing.T) {
 	id := ID{}
 	err := id.UnmarshalText([]byte("012brpk4q72xwf2m63l1245453gfdgxz"))
 
-	if err != errInvalidDataSize {
-		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
+	if _, ok := err.(*InvalidDataSizeError); !ok {
+		t.Errorf("expected error with type [%T], got [%T]", &InvalidDataSizeError{}, err)
 	}
 }
 
@@ -184,8 +184,8 @@ func TestID_UnmarshalJSON_Invalid(t *testing.T) {
 	id := ID{}
 	err := id.UnmarshalJSON([]byte("\"012brpk4q72xwf2m63l1245453gfdgxz\""))
 
-	if err != errInvalidDataSize {
-		t.Errorf("expected error [%s], got [%s]", errInvalidDataSize, err)
+	if _, ok := err.(*InvalidDataSizeError); !ok {
+		t.Errorf("expected error with type [%T], got [%T]", &InvalidDataSizeError{}, err)
 	}
 
 	if err != nil && err.Error() != errInvalidDataSizeMsg {
@@ -284,10 +284,10 @@ func TestID_Scan(t *testing.T) {
 	}{
 		{"nil", nil, ID{}, nil, ""},
 		{"bytes-valid", id[:], id, nil, ""},
-		{"bytes-invalid", make([]byte, 3), zero, errInvalidDataSize, errInvalidDataSizeMsg},
+		{"bytes-invalid", make([]byte, 3), zero, &InvalidDataSizeError{Size: 3}, errInvalidDataSizeMsg},
 		{"bytes-zero", []byte{}, zero, nil, ""},
 		{"string-valid", id.String(), id, nil, ""},
-		{"string-invalid", "123", zero, errInvalidDataSize, errInvalidDataSizeMsg},
+		{"string-invalid", "123", zero, &InvalidDataSizeError{Size: 3}, errInvalidDataSizeMsg},
 		{"string-zero", "", zero, nil, ""},
 		{"invalid", 69, ID{}, &InvalidTypeError{Value: 69}, fmt.Sprintf(errInvalidTypeFmt, 69)},
 	} {
