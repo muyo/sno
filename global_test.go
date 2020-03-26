@@ -5,6 +5,43 @@ import (
 	"testing"
 )
 
+func TestGlobal_Init(t *testing.T) {
+	t.Run("sane", func(t *testing.T) {
+		defer func() {
+			if err := recover(); err != nil {
+				t.Fatal("expected init to not panic")
+			}
+		}()
+
+		// Must never panic.
+		doInit()
+	})
+
+	t.Run("panics", func(t *testing.T) {
+		defer func() {
+			err := recover()
+			if err == nil {
+				t.Fatal("expected init to panic")
+			}
+
+			if _, ok := err.(*PartitionPoolExhaustedError); !ok {
+				t.Errorf("expected panic with type [%T], got [%T]", &PartitionPoolExhaustedError{}, err)
+				return
+			}
+		}()
+
+		// Theoretically impossible to happen but ensure that we cover all "potential" cases
+		// where the global generator could fail to get constructed and we need to panic.
+		//
+		// At present only one branch even has an error return, so we simulate that... impossibility
+		// by trying to create more Generators without snapshots than we have a Partition pool for.
+		// Note that we are invoking doInit() instead of NewGenerator() directly.
+		for i := 0; i < 2*maxPartition; i++ {
+			doInit()
+		}
+	})
+}
+
 func TestGlobal_FromEncodedString_Valid(t *testing.T) {
 	src := "brpk4q72xwf2m63l"
 	expected := ID{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}

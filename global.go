@@ -12,10 +12,12 @@ var (
 )
 
 func init() {
+	doInit()
+}
+
+func doInit() {
 	g, err := NewGenerator(nil, nil)
 	if err != nil {
-		// Will only ever happen if the underlying call to crypto/rand fails -
-		// and if, then this happens during startup only.
 		panic(err)
 	}
 

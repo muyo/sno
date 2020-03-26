@@ -4,15 +4,17 @@ import "fmt"
 
 const (
 	errInvalidDataSizeMsg         = "sno: unrecognized data size"
-	errInvalidTypeFmt             = "sno: unrecognized type: %T"
+	errInvalidTypeFmt             = "sno: unrecognized data type: %T"
 	errInvalidSequenceBoundsFmt   = "sno: %s; min: %d, sequence: %d, max: %d, pool: %d"
-	errSequenceBoundsIdenticalMsg = "sequence bounds are identical - need a sequence pool with a capacity of at least 4"
-	errSequenceUnderflowsBound    = "current sequence underflows the given lower bound"
-	errSequencePoolTooSmallMsg    = "generators require a sequence pool with a capacity of at least 4"
+	errSequenceBoundsIdenticalMsg = "sno: sequence bounds are identical - need a sequence pool with a capacity of at least 4"
+	errSequenceUnderflowsBound    = "sno: current sequence underflows the given lower bound"
+	errSequencePoolTooSmallMsg    = "sno: generators require a sequence pool with a capacity of at least 4"
+	errPartitionPoolExhaustedMsg  = "sno: process exceeded maximum number of possible defaults-configured generators"
 )
 
 var (
-	errInvalidDataSize = &InvalidDataSizeError{}
+	errInvalidDataSize        = &InvalidDataSizeError{}
+	errPartitionPoolExhausted = &PartitionPoolExhaustedError{}
 )
 
 // InvalidDataSizeError gets returned when attempting to unmarshal or decode an ID from data that
@@ -46,3 +48,11 @@ type InvalidSequenceBoundsError struct {
 func (e *InvalidSequenceBoundsError) Error() string {
 	return fmt.Sprintf(errInvalidSequenceBoundsFmt, e.Msg, e.Min, e.Cur, e.Max, e.Max-e.Min+1)
 }
+
+// InvalidDataSizeError gets returned when attempting to create more than maxPartition (65535)
+// Generators using the default configuration (eg. without snapshots).
+//
+// Should you ever run into this, please consult the docs on the genPartition() internal function.
+type PartitionPoolExhaustedError struct{}
+
+func (e *PartitionPoolExhaustedError) Error() string { return errPartitionPoolExhaustedMsg }
