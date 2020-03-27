@@ -3,6 +3,7 @@ package sno
 import (
 	"bytes"
 	"database/sql/driver"
+	"encoding/binary"
 	"time"
 	"unsafe"
 )
@@ -32,27 +33,18 @@ type ID [SizeBinary]byte
 
 // Time returns the timestamp of the ID as a time.Time struct.
 func (id ID) Time() time.Time {
-	units := int64(id[0]) << 31
-	units |= int64(id[1]) << 23
-	units |= int64(id[2]) << 15
-	units |= int64(id[3]) << 7
-	units |= int64(id[4]) >> 1
-
-	s := units/250 + Epoch
-	ns := (units % 250) * TimeUnit
+	var (
+		units = int64(binary.BigEndian.Uint64(id[:]) >> 25)
+		s     = units/250 + Epoch
+		ns    = (units % 250) * TimeUnit
+	)
 
 	return time.Unix(s, ns)
 }
 
 // Timestamp returns the timestamp of the ID as nanoseconds relative to the Unix epoch.
 func (id ID) Timestamp() int64 {
-	units := int64(id[0]) << 31
-	units |= int64(id[1]) << 23
-	units |= int64(id[2]) << 15
-	units |= int64(id[3]) << 7
-	units |= int64(id[4]) >> 1
-
-	return units*TimeUnit + epochNsec
+	return int64(binary.BigEndian.Uint64(id[:])>>25)*TimeUnit + epochNsec
 }
 
 // Meta returns the metabyte of the ID.
