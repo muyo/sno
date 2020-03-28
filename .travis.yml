@@ -6,7 +6,24 @@ go:
   - "1.14"
   - "master"
 
+arch:
+  - amd64
+
+os:
+  - linux
+  - osx
+  - windows
+
 matrix:
+  include:
+    - os: linux
+      arch: amd64
+    - os: linux
+      arch: arm64
+    - os: linux
+      arch: ppc64le
+    - os: linux
+      arch: s390x
   allow_failures:
     - go: "master"
   fast_finish: true
