@@ -28,6 +28,7 @@ func init() {
 }
 
 func encode(src *ID) (dst [SizeEncoded]byte) {
+	dst[15] = encoding[src[9]&0x1F]
 	dst[14] = encoding[(src[9]>>5|src[8]<<3)&0x1F]
 	dst[13] = encoding[src[8]>>2&0x1F]
 	dst[12] = encoding[(src[8]>>7|src[7]<<1)&0x1F]
