@@ -18,12 +18,13 @@ matrix:
   include:
     - os: linux
       arch: amd64
+      go: "1.14"
     - os: linux
       arch: arm64
+      go: "1.14"
     - os: linux
       arch: ppc64le
-    - os: linux
-      arch: s390x
+      go: "1.14"
   allow_failures:
     - go: "master"
   fast_finish: true
