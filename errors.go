@@ -46,7 +46,7 @@ func (e *InvalidSequenceBoundsError) Error() string {
 	return fmt.Sprintf(errInvalidSequenceBoundsFmt, e.Msg, e.Min, e.Cur, e.Max, e.Max-e.Min+1)
 }
 
-// InvalidDataSizeError gets returned when attempting to create more than maxPartition (65535)
+// PartitionPoolExhaustedError gets returned when attempting to create more than maxPartition (65535)
 // Generators using the default configuration (eg. without snapshots).
 //
 // Should you ever run into this, please consult the docs on the genPartition() internal function.

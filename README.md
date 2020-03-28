@@ -1,9 +1,9 @@
-<img src="./.github/logo_200x200.png" alt="sno logo" title="sno" align="left"  height="200" />
+<img src="./.github/logo_200x200.png" alt="sno logo" title="sno" align="left" height="200" />
 
 A spec for **unique IDs in distributed systems** based on the Snowflake design, e.g. a coordination-based ID variant. 
 It aims to be friendly to both machines and humans, compact, *versatile* and fast.
 
-This repository contains a **Go** library for generating such IDs. 
+This repository contains a **Go** package for generating such IDs. 
 
 [![GoDoc](https://img.shields.io/badge/godoc-reference-00a1fe.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) 
 [![Travis build: master](https://img.shields.io/travis/muyo/sno/master.svg?logo=travis&style=flat-square)](https://travis-ci.org/muyo/sno) 
@@ -538,7 +538,7 @@ CPU supports them.
 | [cuid]      |     n/a     |   25 chars    | :white_check_mark: | :x:                | :x:
 | [xid]       |  12 bytes   |   20 chars    | :white_check_mark: | :x:                | :x:
 | **sno**     |  10 bytes   |   16 chars    | :white_check_mark: | :x:                | :white_check_mark:
-| [Snowflake] |   8 bytes   | <=20 chars    | :white_check_mark: | :x:                | :x:
+| [Snowflake] |   8 bytes   |  ≤20 chars    | :white_check_mark: | :x:                | :x:
 
 All of the above link to Go implementations based on popularity (GH stars) or per recommended implementations in specs.
 

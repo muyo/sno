@@ -70,10 +70,10 @@ func (id ID) IsZero() bool {
 // String implements fmt.Stringer by returning the base32-encoded representation of the ID
 // as a string.
 func (id ID) String() string {
-	e := encode(&id)
-	b := e[:]
+	enc := encode(&id)
+	dst := enc[:]
 
-	return *(*string)(unsafe.Pointer(&b))
+	return *(*string)(unsafe.Pointer(&dst))
 }
 
 // Bytes returns the ID as a byte slice.
