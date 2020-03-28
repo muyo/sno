@@ -5,12 +5,12 @@ It aims to be friendly to both machines and humans, compact, *versatile* and fas
 
 This repository contains a **Go** package for generating such IDs. 
 
-[![GoDoc](https://img.shields.io/badge/godoc-reference-00a1fe.svg?style=flat-square)](https://godoc.org/github.com/muyo/sno) 
-[![Travis build: master](https://img.shields.io/travis/muyo/sno/master.svg?logo=travis&style=flat-square)](https://travis-ci.org/muyo/sno) 
+[![GoDoc](https://img.shields.io/badge/doc-reference-00a1fe.svg?style=flat-square)](https://pkg.go.dev/github.com/muyo/sno?tab=doc) 
+[![Stable version](https://img.shields.io/github/v/release/muyo/sno?color=00a1fe&label=stable&sort=semver&style=flat-square)](https://github.com/muyo/sno/releases) 
+[![Travis build: master](https://img.shields.io/travis/muyo/sno/master.svg?logo=travis&label=ci&style=flat-square)](https://travis-ci.org/muyo/sno) 
 [![Coverage](https://img.shields.io/codecov/c/github/muyo/sno.svg?logo=codecov&style=flat-square)](https://codecov.io/gh/muyo/sno)
 [![Go Report Card](https://goreportcard.com/badge/github.com/muyo/sno?style=flat-square)](https://goreportcard.com/report/github.com/muyo/sno) 
 [![License](http://img.shields.io/badge/license-MIT-00a1fe.svg?style=flat-square)](https://raw.githubusercontent.com/muyo/sno/master/LICENSE) 
-
 ```bash
 go get -u github.com/muyo/sno
 ```
@@ -57,7 +57,7 @@ id := sno.New(0)
 ```
 
 Where `0` is the ➜ [Metabyte](#metabyte).<br />
-Vide [godoc](https://godoc.org/github.com/muyo/sno) for the entire API.
+Vide [godoc](https://pkg.go.dev/github.com/muyo/sno?tab=doc) for the entire API.
 
 The global generator is immutable and private. It's therefore also not possible to restore it using a Snapshot. 
 It uses 2 random bytes as its partition, meaning its partition changes across restarts.
