@@ -1,6 +1,6 @@
 <img src="./.github/logo_200x200.png" alt="sno logo" title="sno" align="left" height="200" />
 
-A spec for **unique IDs in distributed systems** based on the Snowflake design, e.g. a coordination-based ID variant. 
+A spec for **unique IDs in distributed systems** based on the Snowflake design, i.e. a coordination-based ID variant. 
 It aims to be friendly to both machines and humans, compact, *versatile* and fast.
 
 This repository contains a **Go** package for generating such IDs. 
@@ -29,10 +29,10 @@ go get -u github.com/muyo/sno
 (256 combinations) per tick-tock (1 bit adjustment for clock drifts ➜ [Time and sequence](#time-and-sequence)). 
 **549,755,813,888,000** is the global pool **per second** when the metabyte, partition and tick-tock are 
 taken into account.
-- Data layout straightforward to inspect or encode/decode (➜ [Layout](#layout))
+- **Simple data layout** - straightforward to inspect or encode/decode (➜ [Layout](#layout))
 - Configuration and coordination optional (➜ [Usage](#usage))
-- Fast, wait-free, safe for concurrent use (➜ [Benchmarks](#benchmarks))
-- Fills a niche (➜ [Alternatives](#alternatives))
+- **Fast**, wait-free, safe for concurrent use (➜ [Benchmarks](#benchmarks))
+<br />Clocks in at just over 500 LoC, has  no external dependencies and minimal dependencies on std.
 
 ### Non-features / cons
 
@@ -46,7 +46,7 @@ unpredictability of IDs is a must. They still, however, meet the common requirem
 
 <br />
 
-## Usage
+## Usage (➜ [API reference](https://pkg.go.dev/github.com/muyo/sno?tab=doc))
 
 **sno** comes with a package-level generator on top of letting you configure your own generators. 
 
@@ -57,15 +57,14 @@ id := sno.New(0)
 ```
 
 Where `0` is the ➜ [Metabyte](#metabyte).<br />
-Vide [godoc](https://pkg.go.dev/github.com/muyo/sno?tab=doc) for the entire API.
 
 The global generator is immutable and private. It's therefore also not possible to restore it using a Snapshot. 
-It uses 2 random bytes as its partition, meaning its partition changes across restarts.
+It uses 2 pseudo random bytes as its partition, meaning its partition changes across restarts.
 
 *As soon as you run more than 1 generator, you **should** start coordinating* the creation of generators to 
 actually *guarantee* a collision-free ride. This applies to all ID specs of the Snowflake variant.
 
-### Partitions
+### Partitions (➜ [doc](https://pkg.go.dev/github.com/muyo/sno?tab=doc#Partition))
 
 Partitions are one of several friends you have to get you those guarantees. A partition is 2 bytes. 
 What they mean and how you define them is up to you.
@@ -79,7 +78,7 @@ generator, err := sno.NewGenerator(&sno.GeneratorSnapshot{
 Multiple generators can share a partition by dividing the sequence pool between 
 them (➜ [Sequence sharding](#sequence-sharding)).
 
-### Snapshots
+### Snapshots (➜ [doc](https://pkg.go.dev/github.com/muyo/sno?tab=doc#GeneratorSnapshot))
 
 Snapshots happen to serve both as configuration and a means of saving and restoring generator data. They are 
 optional - simply pass `nil` to `NewGenerator()`, and what you get will be configured like the package-level generator, 
@@ -91,7 +90,7 @@ Snapshots can be taken at runtime:
 s := generator.Snapshot()
 ```
 
-This exposes most of a generator's internal bookkeeping data. In an ideal world where programmers are not lazy even 
+This exposes most of a generator's internal bookkeeping data. In an ideal world where programmers are not lazy 
 until their system runs into an edge case - you'd persist that snapshot across restarts and restore generators 
 instead of just creating them from scratch each time. This will keep you safe both if a large clock drift happens 
 during the restart -- or before, and you just happen to come back online again "in the past", relative to IDs that 
@@ -202,7 +201,7 @@ generators.
 
 It is safe for a range previously used by another generator to be assigned to a different generator under the
 following conditions:
-- it happens in a different timeframe *in the future*, e.g. no sooner than after 4msec have passed (no orchestrator 
+- it happens in a different timeframe *in the future*, i.e. no sooner than after 4msec have passed (no orchestrator 
   is fast enough to get a new container online to replace a dead one for this to be a worry);
 - if you can guarantee the new Generator won't regress into a time the previous Generator was running in.
 
@@ -322,7 +321,7 @@ without requiring slew mode nor having to worry about even large drifts.
 **sno** attempts to eliminate the issue *entirely* - both despite and because of its small pool of bits to work with.
 
 The approach it takes is simple - each generator keeps track of the highest wall clock time it got from the OS\*, 
-each time it generates a new timestamp. If we get a time that is lower than the one we recorded, e.g. the clock 
+each time it generates a new timestamp. If we get a time that is lower than the one we recorded, i.e. the clock 
 drifted backwards and we'd risk generating colliding IDs, we toggle a bit - stored from here on out in 
 each **sno** generated *until the next regression*. Rinse, repeat - tick, tock.
 
@@ -344,7 +343,7 @@ So this is a **sno-go**.
 (I will show myself out...)
 
 The simplistic approach of tick-tocking *entirely eliminates* that collision chance - but with a rigorous assumption: 
-regressions happen at most once into a specific period, e.g. from the highest recorded time into the past 
+regressions happen at most once into a specific period, i.e. from the highest recorded time into the past 
 and never back into that particular timeframe (let alone even further into the past). 
 
 This *generally* is exactly the case but oddities as far as time synchronization, bad clocks and NTP client 
@@ -412,7 +411,7 @@ And simple constants tend to do the trick.
 </summary>
 <p>
 
-Untyped integers can pass as `uint8` (e.g. `byte`) in Go, so the following would work and keep things tidy:
+Untyped integers can pass as `uint8` (i.e. `byte`) in Go, so the following would work and keep things tidy:
 
 ```go
 const (
@@ -605,7 +604,7 @@ unexpected in the parallel test (branch prediction?) but remained consistent.
 
 **Snowflakes**
 
-What does `Unbounded` mean? [xid], for example, is unbounded, e.g. it does not prevent you from generating more IDs 
+What does `Unbounded` mean? [xid], for example, is unbounded, i.e. it does not prevent you from generating more IDs 
 than it has a pool for (nor does it account for time). In other words - at high enough throughput you simply and 
 silently start overwriting already generated IDs. *Realistically* you are not going to fill its pool of 
 a 16,777,216 capacity. But it does reflect in synthetic benchmarks. [Sandflake] does not bind nor handle clock 
@@ -613,7 +612,7 @@ drifts either. In both cases their results are `WYSIWYG`.
 
 The implementations that do bind, approach this issue (and clock drifts) differently. [Sonyflake] goes to sleep, 
 [Snowflake] spins aggressively to get the OS time. **sno**, when about to overflow, starts a single timer and 
-locks all overflowing requests on a condition, waking them up when the sequence resets, e.g. time changes.
+locks all overflowing requests on a condition, waking them up when the sequence resets, i.e. time changes.
 
 Both of the above are edge cases, *realistically* - Go's benchmarks happen to saturate the capacities and hit 
 those cases. **Most of the time what you get is the unbounded overhead**.  Expect said overhead of the 
