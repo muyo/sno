@@ -133,10 +133,9 @@ func (id ID) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 
-	dst := make([]byte, SizeEncoded+2)
+	dst := []byte("\"                \"")
 	enc := encode(&id)
-	copy(dst[1:SizeEncoded+1], enc[:])
-	dst[0], dst[SizeEncoded+1] = '"', '"'
+	copy(dst[1:], enc[:])
 
 	return dst, nil
 }
