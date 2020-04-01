@@ -528,16 +528,16 @@ CPU supports them.
 
 ## Alternatives
 
-| Name        | Binary size | Encoded size* | Sortable           | Random**           | Metadata***
-|-------------|-------------|---------------|--------------------|--------------------|------------------
-| [UUID]      |  16 bytes   |   36 chars    | :x:                | :white_check_mark: | :x:
-| [KSUID]     |  20 bytes   |   27 chars    | :white_check_mark: | :white_check_mark: | :x:
-| [ULID]      |  16 bytes   |   26 chars    | :white_check_mark: | :white_check_mark: | :x:
-| [Sandflake] |  16 bytes   |   26 chars    | :white_check_mark: | :x:                | :x:
-| [cuid]      |     n/a     |   25 chars    | :white_check_mark: | :x:                | :x:
-| [xid]       |  12 bytes   |   20 chars    | :white_check_mark: | :x:                | :x:
-| **sno**     |  10 bytes   |   16 chars    | :white_check_mark: | :x:                | :white_check_mark:
-| [Snowflake] |   8 bytes   |  ≤20 chars    | :white_check_mark: | :x:                | :x:
+| Name        | Binary (bytes) | Encoded (chars)* | Sortable  | Random**  | Metadata
+|------------:|:--------------:|:----------------:|:---------:|:---------:|:---------:
+| [UUID]      |       16       |        36        |   ![no]   | ![yes]    | ![no]
+| [KSUID]     |       20       |        27        |   ![yes]  | ![yes]    | ![no]
+| [ULID]      |       16       |        26        |   ![yes]  | ![yes]    | ![no]
+| [Sandflake] |       16       |        26        |   ![yes]  | ![meh]    | ![no]
+| [cuid]      |       n/a      |        25        |   ![yes]  | ![meh]    | ![no]
+| [xid]       |       12       |        20        |   ![yes]  | ![no]     | ![no]
+| **sno**     |       10       |      **16**      |   ![yes]  | ![no]     | ![yes]
+| [Snowflake] |      **8**     |       ≤20        |   ![yes]  | ![no]     | ![no]
 
 All of the above link to Go implementations based on popularity (GH stars) or per recommended implementations in specs.
 
@@ -550,11 +550,14 @@ All of the above link to Go implementations based on popularity (GH stars) or pe
 [ULID]: https://github.com/oklog/ulid
 [xid]: https://github.com/rs/xid
 
+[yes]: ./.github/ico-yes.svg
+[meh]: ./.github/ico-meh.svg
+[no]:  ./.github/ico-no.svg
+
 \*  Using canonical encoding.<br />
 \** When used with a proper CSPRNG. The more important aspect is the distinction between entropy-based and 
 coordination-based IDs. [Sandflake] and [cuid] do contain entropy, but not sufficient to rely on entropy
 alone to avoid collisions (3 bytes and 4 bytes respectively).<br />
-\*** Had to.
 
 ## Benchmarks
 
