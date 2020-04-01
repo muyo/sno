@@ -19,8 +19,7 @@ const (
 
 	// MaxSequence is the max sequence number supported by generators.
 	// As bounds can be set individually - this is the upper cap.
-	MaxSequence  = 1<<16 - 1
-	maxPartition = 1<<16 - 1
+	MaxSequence = 1<<16 - 1
 
 	// Arbitrary min pool size of 4 per time unit (that is 1000 per sec).
 	minSequencePoolSize = 4
