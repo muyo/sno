@@ -1,3 +1,5 @@
+// +build test
+
 package sno
 
 import (
@@ -6,6 +8,18 @@ import (
 	"time"
 	_ "unsafe" // required to use //go:linkname
 )
+
+// snotime is the actual time source used by Generators during tests.
+//
+// We split on build tags ("test") to swap out the snotime() implementations provided by platform specific
+// code from being a statically dispatched function to a dynamically dispatched one so that tests can swap
+// it out for fake time sources without in any way impacting a Generator's runtime performance in
+// production builds. Unfortunately this leads to some code duplication as the actual implementations
+// themselves are duplicated -- fortunately they are nearly trivial one-liners.
+//
+// Note: Attempting to run the test suite without the "test" build tag will fail, resulting in several
+// compilation errors.
+var snotime = snotimeReal
 
 // monotime provides real monotonic clock readings to several tests.
 //go:linkname monotime runtime.nanotime

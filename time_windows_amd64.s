@@ -19,16 +19,16 @@
 //
 // func ostime() uint64
 TEXT ·ostime(SB), NOSPLIT, $0-8
-	MOVQ	$2147352596, DI     // 0x7ffe0014 -> 2147352596
+    MOVQ	$2147352596, DI     // 0x7ffe0014 -> 2147352596
 time:
-	MOVL	4(DI), AX           // time_hi1
-	MOVL	0(DI), BX           // time_lo
-	MOVL	8(DI), CX           // time_hi2
-	CMPL	AX, CX
-	JNE	    time
+    MOVL	4(DI), AX           // time_hi1
+    MOVL	0(DI), BX           // time_lo
+    MOVL	8(DI), CX           // time_hi2
+    CMPL	AX, CX
+    JNE	    time
 
-	SHLQ	$32, AX
-	ORQ     BX, AX
+    SHLQ	$32, AX
+    ORQ     BX, AX
 
     // Windows time as stored within _KUSER_SHARED_DATA starts at Jan 1st 1601.
     // The offset in the Windows units (100ns) to Unix epoch is a SUBQ by 116 444 736 000 000 000.
@@ -46,5 +46,5 @@ time:
     MOVQ	$129067776000000000, DI
     SUBQ	DI, AX
 
-	MOVQ	AX, units+0(FP)
-	RET
+    MOVQ	AX, units+0(FP)
+    RET
