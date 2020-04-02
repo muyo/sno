@@ -58,8 +58,6 @@ type Generator struct {
 	seqOverflowTicker *time.Ticker
 	seqOverflowCount  uint32 // Behind seqOverflowCond lock.
 	seqOverflowChan   chan<- *SequenceOverflowNotification
-
-	clock func() uint64
 }
 
 // NewGenerator returns a new generator based on the optional Snapshot.
@@ -82,7 +80,7 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 	)
 
 	if wallSafe != 0 {
-		wallNow := nanotime()
+		wallNow := snotime()
 		// Since we can't currently infer whether it'd be safe to simply resume (e.g. whether
 		// the snapshot got taken during a simple drift - a single regression, or while contenders
 		// were sleeping during a multi-regression), we take the safe route out and set wallHi so
@@ -110,7 +108,6 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		wallHi:          &wallHi,
 		wallSafe:        &wallSafe,
 		regression:      &sync.Mutex{},
-		clock:           nanotime,
 	}, nil
 }
 
@@ -136,19 +133,19 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 		wallHi:          new(uint64),
 		wallSafe:        new(uint64),
 		regression:      &sync.Mutex{},
-		clock:           nanotime,
 	}, nil
 }
 
 // New generates a new ID using the current system time for its timestamp.
 func (g *Generator) New(meta byte) (id ID) {
 	var (
-		// Note: Single load of wallHi for the evaluations is correct (as wallNow is static).
+		// Note: Single load of wallHi for the evaluations is correct (as we only grab wallNow
+		// once as well).
 		wallHi  = atomic.LoadUint64(g.wallHi)
-		wallNow = g.clock()
+		wallNow = snotime()
 	)
 
-	// Fastest branch if we're still in the same timeframe.
+	// Fastest branch if we're still within the most recent time unit.
 	if wallHi == wallNow {
 		seq := atomic.AddUint32(g.seq, 1)
 
@@ -176,7 +173,8 @@ func (g *Generator) New(meta byte) (id ID) {
 		g.seqOverflowCount++
 
 		if g.seqOverflowTicker == nil {
-			g.seqOverflowTicker = time.NewTicker(tickRate)
+			// Tick *roughly* each 1ms during overflows.
+			g.seqOverflowTicker = time.NewTicker(TimeUnit / 4)
 			go g.seqOverflowLoop()
 		}
 
@@ -290,7 +288,7 @@ func (g *Generator) Partition() Partition {
 // determine the current overflow via:
 //	overflow := int(uint32(generator.SequenceMax()) - generator.Sequence())
 func (g *Generator) Sequence() uint32 {
-	if wallNow := g.clock(); wallNow == atomic.LoadUint64(g.wallHi) {
+	if wallNow := snotime(); wallNow == atomic.LoadUint64(g.wallHi) {
 		return atomic.LoadUint32(g.seq)
 	}
 
@@ -309,7 +307,7 @@ func (g *Generator) SequenceMax() uint16 {
 
 // Len returns the number of IDs generated in the current timeframe.
 func (g *Generator) Len() int {
-	if wallNow := g.clock(); wallNow == atomic.LoadUint64(g.wallHi) {
+	if wallNow := snotime(); wallNow == atomic.LoadUint64(g.wallHi) {
 		if seq := atomic.LoadUint32(g.seq); g.seqMax > seq {
 			return int(seq-g.seqMin) + 1
 		}
@@ -333,7 +331,7 @@ func (g *Generator) Cap() int {
 // Snapshot returns a copy of the Generator's current bookkeeping data.
 func (g *Generator) Snapshot() GeneratorSnapshot {
 	var (
-		wallNow = g.clock()
+		wallNow = snotime()
 		wallHi  = atomic.LoadUint64(g.wallHi)
 		seq     uint32
 	)
@@ -447,6 +445,10 @@ func (g *Generator) seqOverflowLoop() {
 		}
 	}
 }
+
+// Arbitrary min pool size of 4 per time unit (that is 1000 per sec).
+// Separated out as a constant as this value is being tested against.
+const minSequencePoolSize = 4
 
 func sanitizeSnapshotBounds(s *GeneratorSnapshot) error {
 	// Zero value of SequenceMax will pass as the default max if and only if SequenceMin is not already

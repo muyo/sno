@@ -22,11 +22,11 @@ before_install:
   - go get github.com/mattn/goveralls
 
 script:
-  - go test -v -x -tags=test -race -coverprofile=coverage.txt -covermode=atomic ./
+  - go test -x -gcflags=all=-l -tags=test -race -coverprofile=coverage.txt -covermode=atomic ./
 
 after_success:
   - goveralls -coverprofile=coverage.txt -service=travis-ci
-  - bash <(curl -s https://codecov.io/bash) -v -f coverage.txt
+  - bash <(curl -s https://codecov.io/bash) -f coverage.txt
 
 notifications:
   webhooks: https://coveralls.io/webhook
@@ -44,7 +44,7 @@ jobs:
       go: "1.14"
       script:
         # Go's race detector does not work on s390x
-        - go test -v -x -tags=test -coverprofile=coverage.txt -covermode=atomic ./
+        - go test -x -gcflags=all=-l -tags=test -coverprofile=coverage.txt -covermode=atomic ./
 
   allow_failures:
     - go: "master"

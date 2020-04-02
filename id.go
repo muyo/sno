@@ -14,6 +14,22 @@ const (
 
 	// SizeEncoded is the length of an ID in its canonical base-32 encoded representation.
 	SizeEncoded = 16
+
+	// Epoch is the offset to the Unix epoch, in seconds, that ID timestamps are embedded with.
+	// 1262304000 corresponds to 2010-01-01 00:00:00 UTC
+	Epoch     = 1262304000
+	epochNsec = Epoch * 1e9
+
+	// TimeUnit is the time unit timestamps are embedded with - 4msec.
+	TimeUnit = 4e6
+
+	// MaxTimestamp is the max number of time units that can be embedded in an ID's timestamp.
+	// Corresponds to 2079-09-07 15:47:35.548 UTC in our custom epoch.
+	MaxTimestamp = 1<<39 - 1
+
+	// MaxSequence is the max sequence number supported by generators.
+	// As bounds can be set individually - this is the upper cap.
+	MaxSequence = 1<<16 - 1
 )
 
 // ID is the binary representation of a sno ID.
