@@ -5,12 +5,12 @@ package sno
 
 import _ "unsafe" // required to use //go:linkname
 
-//go:linkname now time.now
-func now() (sec int64, nsec int32, mono int64)
+//go:linkname ostime runtime.walltime1
+func ostime() (sec int64, nsec int32)
 
 // Keep this in sync with the '!test' implementation.
 func snotimeReal() uint64 {
-	wallSec, wallNsec, _ := now()
+	wallSec, wallNsec := ostime()
 
 	return (uint64(wallSec)*1e9 + uint64(wallNsec) - epochNsec) / TimeUnit
 }
