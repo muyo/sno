@@ -8,7 +8,7 @@ import (
 func TestPartition_Public_Conversions(t *testing.T) {
 	t.Run("AsUint16", func(t *testing.T) {
 		src := Partition{255, 255}
-		expected := uint16(maxPartition)
+		expected := uint16(MaxPartition)
 		actual := src.AsUint16()
 
 		if actual != expected {
@@ -19,7 +19,7 @@ func TestPartition_Public_Conversions(t *testing.T) {
 	t.Run("PutUint16", func(t *testing.T) {
 		expected := Partition{255, 255}
 		actual := Partition{}
-		actual.PutUint16(maxPartition)
+		actual.PutUint16(MaxPartition)
 
 		if actual != expected {
 			t.Errorf("expected [%s], got [%s]", expected, actual)
@@ -29,7 +29,7 @@ func TestPartition_Public_Conversions(t *testing.T) {
 
 func TestPartition_Internal_Conversions(t *testing.T) {
 	public := Partition{255, 255}
-	internal := uint32(maxPartition) << 16
+	internal := uint32(MaxPartition) << 16
 
 	t.Run("to-internal", func(t *testing.T) {
 		expected := internal
@@ -80,7 +80,7 @@ func TestPartition_Internal_Generation(t *testing.T) {
 		// Reset global count (leaving seed as is).
 		atomic.StoreUint32(&partitions, 0)
 
-		for i := 0; i < 2*maxPartition; i++ {
+		for i := 0; i < 2*MaxPartition; i++ {
 			_, err := genPartition()
 
 			if err != nil {
@@ -90,8 +90,8 @@ func TestPartition_Internal_Generation(t *testing.T) {
 					return
 				}
 
-				if i < maxPartition {
-					t.Fatalf("expected errors no sooner than after [%d] iterations, got to [%d]", maxPartition, i)
+				if i < MaxPartition {
+					t.Fatalf("expected errors no sooner than after [%d] iterations, got to [%d]", MaxPartition, i)
 					return
 				}
 
@@ -103,9 +103,9 @@ func TestPartition_Internal_Generation(t *testing.T) {
 				}
 			}
 
-			if i >= maxPartition {
+			if i >= MaxPartition {
 				if err == nil {
-					t.Fatalf("expected constant errors after [%d] iterations, got no error at [%d]", maxPartition, i)
+					t.Fatalf("expected constant errors after [%d] iterations, got no error at [%d]", MaxPartition, i)
 					return
 				}
 			}

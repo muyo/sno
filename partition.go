@@ -20,9 +20,6 @@ func (p *Partition) PutUint16(u uint16) {
 	p[1] = byte(u)
 }
 
-// maxPartition equals max uint16 and is the equivalent of Partition{255, 255}.
-const maxPartition = 1<<16 - 1
-
 // genPartition generates a Partition in its internal representation from a time based seed.
 //
 // While this alone would be enough if we only used this once (for the global generator),
@@ -60,7 +57,7 @@ const maxPartition = 1<<16 - 1
 func genPartition() (uint32, error) {
 	n := atomic.AddUint32(&partitions, 1)
 
-	if n > maxPartition {
+	if n > MaxPartition {
 		return 0, &PartitionPoolExhaustedError{}
 	}
 

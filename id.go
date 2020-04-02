@@ -27,8 +27,12 @@ const (
 	// Corresponds to 2079-09-07 15:47:35.548 UTC in our custom epoch.
 	MaxTimestamp = 1<<39 - 1
 
-	// MaxSequence is the max sequence number supported by generators.
-	// As bounds can be set individually - this is the upper cap.
+	// MaxPartition is the max Partition number when represented as a uint16.
+	// It equals max uint16 (65535) and is the equivalent of Partition{255, 255}.
+	MaxPartition = 1<<16 - 1
+
+	// MaxSequence is the max sequence number supported by generators. As bounds can be set
+	// individually - this is the upper cap and equals max uint16 (65535).
 	MaxSequence = 1<<16 - 1
 )
 

@@ -36,7 +36,7 @@ func TestGlobal_Init(t *testing.T) {
 		// At present only one branch even has an error return, so we simulate that... impossibility
 		// by trying to create more Generators without snapshots than we have a Partition pool for.
 		// Note that we are invoking doInit() instead of NewGenerator() directly.
-		for i := 0; i < 2*maxPartition; i++ {
+		for i := 0; i < 2*MaxPartition; i++ {
 			doInit()
 		}
 	})
