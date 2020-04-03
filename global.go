@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	generator Generator
+	generator *Generator
 	zero      ID
 )
 
@@ -21,7 +21,7 @@ func doInit() {
 		panic(err)
 	}
 
-	generator = *g
+	generator = g
 }
 
 // New uses the package-level generator to generate a new ID using the current system

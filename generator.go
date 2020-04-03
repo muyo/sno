@@ -41,18 +41,23 @@ type SequenceOverflowNotification struct {
 
 // Generator is responsible for generating new IDs scoped to a given fixed Partition and
 // managing their sequence.
+//
+// A Generator must be constructed using NewGenerator - the zero value of a Generator is
+// an unusable state.
+//
+// A Generator must not be copied after first use.
 type Generator struct {
 	partition uint32 // Immutable.
 
-	drifts     *uint32     // Uses the LSB for the tick-tock and serves as a counter.
-	wallHi     *uint64     //
-	wallSafe   *uint64     //
-	regression *sync.Mutex // Regression branch lock.
+	drifts     uint32     // Uses the LSB for the tick-tock and serves as a counter.
+	wallHi     uint64     // Atomic.
+	wallSafe   uint64     // Atomic.
+	regression sync.Mutex // Regression branch lock.
 
-	seq       *uint32
-	seqMin    uint32  // Immutable.
-	seqMax    uint32  // Immutable.
-	seqStatic *uint32 // See NewWithTime. Not included in snapshots (does not get restored).
+	seq       uint32 // Atomic.
+	seqMin    uint32 // Immutable.
+	seqMax    uint32 // Immutable.
+	seqStatic uint32 // Atomic. See NewWithTime. Not included in snapshots (does not get restored).
 
 	seqOverflowCond   *sync.Cond
 	seqOverflowTicker *time.Ticker
@@ -90,24 +95,17 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		}
 	}
 
-	seq := snapshot.Sequence
-	// Offset by -1 because we start 0-indexed, while AddUint gets called first in NewWithTime()
-	// and unlike New(), NewWithTime() has no time progression branch that would catch the first
-	// generation and reset the sequence along with time.
-	seqStatic := uint32(snapshot.SequenceMin - 1)
-
 	return &Generator{
 		partition:       partitionToInternalRepr(snapshot.Partition),
-		seq:             &seq,
+		seq:             snapshot.Sequence,
 		seqMin:          uint32(snapshot.SequenceMin),
 		seqMax:          uint32(snapshot.SequenceMax),
-		seqStatic:       &seqStatic,
+		seqStatic:       uint32(snapshot.SequenceMin - 1), // Offset by -1 since NewWithTime starts this with an incr.
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
 		seqOverflowChan: c,
-		drifts:          &snapshot.Drifts,
-		wallHi:          &wallHi,
-		wallSafe:        &wallSafe,
-		regression:      &sync.Mutex{},
+		drifts:          snapshot.Drifts,
+		wallHi:          wallHi,
+		wallSafe:        wallSafe,
 	}, nil
 }
 
@@ -118,21 +116,12 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 		return nil, err
 	}
 
-	// Offset to -1 (see note in newGeneratorFromSnapshot).
-	seqStatic := ^uint32(0)
-
 	return &Generator{
 		partition:       partition,
-		seq:             new(uint32),
-		seqMin:          0,
 		seqMax:          MaxSequence,
-		seqStatic:       &seqStatic,
+		seqStatic:       ^uint32(0), // Offset by -1 since NewWithTime starts this with an incr.
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
 		seqOverflowChan: c,
-		drifts:          new(uint32),
-		wallHi:          new(uint64),
-		wallSafe:        new(uint64),
-		regression:      &sync.Mutex{},
 	}, nil
 }
 
@@ -141,16 +130,16 @@ func (g *Generator) New(meta byte) (id ID) {
 	var (
 		// Note: Single load of wallHi for the evaluations is correct (as we only grab wallNow
 		// once as well).
-		wallHi  = atomic.LoadUint64(g.wallHi)
+		wallHi  = atomic.LoadUint64(&g.wallHi)
 		wallNow = snotime()
 	)
 
 	// Fastest branch if we're still within the most recent time unit.
 	if wallHi == wallNow {
-		seq := atomic.AddUint32(g.seq, 1)
+		seq := atomic.AddUint32(&g.seq, 1)
 
 		if g.seqMax >= seq {
-			g.applyTimestamp(&id, wallNow, atomic.LoadUint32(g.drifts)&1)
+			g.applyTimestamp(&id, wallNow, atomic.LoadUint32(&g.drifts)&1)
 			g.applyPayload(&id, meta, seq)
 
 			return
@@ -178,7 +167,7 @@ func (g *Generator) New(meta byte) (id ID) {
 			go g.seqOverflowLoop()
 		}
 
-		for atomic.LoadUint32(g.seq) > g.seqMax {
+		for atomic.LoadUint32(&g.seq) > g.seqMax {
 			// We spin pessimistically here instead of a straight lock -> wait -> unlock because that'd
 			// put us back on the New(). At extreme contention we could end up back here anyways.
 			g.seqOverflowCond.Wait()
@@ -191,10 +180,10 @@ func (g *Generator) New(meta byte) (id ID) {
 	}
 
 	// Time progression branch.
-	if wallNow > wallHi && atomic.CompareAndSwapUint64(g.wallHi, wallHi, wallNow) {
-		atomic.StoreUint32(g.seq, g.seqMin)
+	if wallNow > wallHi && atomic.CompareAndSwapUint64(&g.wallHi, wallHi, wallNow) {
+		atomic.StoreUint32(&g.seq, g.seqMin)
 
-		g.applyTimestamp(&id, wallNow, atomic.LoadUint32(g.drifts)&1)
+		g.applyTimestamp(&id, wallNow, atomic.LoadUint32(&g.drifts)&1)
 		g.applyPayload(&id, meta, g.seqMin)
 
 		return
@@ -204,24 +193,23 @@ func (g *Generator) New(meta byte) (id ID) {
 	g.regression.Lock()
 
 	// Check-again. It's possible that another thread applied the drift while we were spinning (if we were).
-	if wallHi = atomic.LoadUint64(g.wallHi); wallNow >= wallHi {
+	if wallHi = atomic.LoadUint64(&g.wallHi); wallNow >= wallHi {
 		g.regression.Unlock()
 
 		return g.New(meta)
 	}
 
-	wallSafe := *g.wallSafe
-	if wallNow > wallSafe {
+	if wallNow > g.wallSafe {
 		// Branch for the one routine that gets to apply the drift.
 		// wallHi is bidirectional (gets updated whenever the wall clock time progresses - or when a drift
 		// gets applied, which is when it regresses). In contrast, wallSafe only ever gets updated when
 		// a drift gets applied and always gets set to the highest time recorded, meaning it
 		// increases monotonically.
-		atomic.StoreUint64(g.wallSafe, wallHi)
-		atomic.StoreUint64(g.wallHi, wallNow)
-		atomic.StoreUint32(g.seq, g.seqMin)
+		atomic.StoreUint64(&g.wallSafe, wallHi)
+		atomic.StoreUint64(&g.wallHi, wallNow)
+		atomic.StoreUint32(&g.seq, g.seqMin)
 
-		g.applyTimestamp(&id, wallNow, atomic.AddUint32(g.drifts, 1)&1)
+		g.applyTimestamp(&id, wallNow, atomic.AddUint32(&g.drifts, 1)&1)
 		g.applyPayload(&id, meta, g.seqMin)
 
 		g.regression.Unlock()
@@ -233,7 +221,7 @@ func (g *Generator) New(meta byte) (id ID) {
 	// before we reached wallSafe again).
 	g.regression.Unlock()
 
-	time.Sleep(time.Duration(wallSafe - wallNow))
+	time.Sleep(time.Duration(g.wallSafe - wallNow))
 
 	return g.New(meta)
 }
@@ -254,10 +242,10 @@ func (g *Generator) New(meta byte) (id ID) {
 // This utility is primarily meant to enable porting of old IDs to sno and assumed to be ran
 // before an ID scheme goes online.
 func (g *Generator) NewWithTime(meta byte, t time.Time) (id ID) {
-	var seq = atomic.AddUint32(g.seqStatic, 1)
+	var seq = atomic.AddUint32(&g.seqStatic, 1)
 
 	if seq > g.seqMax {
-		if !atomic.CompareAndSwapUint32(g.seqStatic, seq, g.seqMin) {
+		if !atomic.CompareAndSwapUint32(&g.seqStatic, seq, g.seqMin) {
 			return g.NewWithTime(meta, t)
 		}
 
@@ -288,8 +276,8 @@ func (g *Generator) Partition() Partition {
 // determine the current overflow via:
 //	overflow := int(uint32(generator.SequenceMax()) - generator.Sequence())
 func (g *Generator) Sequence() uint32 {
-	if wallNow := snotime(); wallNow == atomic.LoadUint64(g.wallHi) {
-		return atomic.LoadUint32(g.seq)
+	if wallNow := snotime(); wallNow == atomic.LoadUint64(&g.wallHi) {
+		return atomic.LoadUint32(&g.seq)
 	}
 
 	return g.seqMin
@@ -307,8 +295,8 @@ func (g *Generator) SequenceMax() uint16 {
 
 // Len returns the number of IDs generated in the current timeframe.
 func (g *Generator) Len() int {
-	if wallNow := snotime(); wallNow == atomic.LoadUint64(g.wallHi) {
-		if seq := atomic.LoadUint32(g.seq); g.seqMax > seq {
+	if wallNow := snotime(); wallNow == atomic.LoadUint64(&g.wallHi) {
+		if seq := atomic.LoadUint32(&g.seq); g.seqMax > seq {
 			return int(seq-g.seqMin) + 1
 		}
 
@@ -332,14 +320,14 @@ func (g *Generator) Cap() int {
 func (g *Generator) Snapshot() GeneratorSnapshot {
 	var (
 		wallNow = snotime()
-		wallHi  = atomic.LoadUint64(g.wallHi)
+		wallHi  = atomic.LoadUint64(&g.wallHi)
 		seq     uint32
 	)
 
 	// Be consistent with g.Sequence() and return seqMin if the next call to New()
 	// would reset the sequence.
 	if wallNow == wallHi {
-		seq = atomic.LoadUint32(g.seq)
+		seq = atomic.LoadUint32(&g.seq)
 	} else {
 		seq = g.seqMin
 	}
@@ -351,8 +339,8 @@ func (g *Generator) Snapshot() GeneratorSnapshot {
 		Sequence:    seq,
 		Now:         int64(wallNow),
 		WallHi:      int64(wallHi),
-		WallSafe:    int64(atomic.LoadUint64(g.wallSafe)),
-		Drifts:      atomic.LoadUint32(g.drifts),
+		WallSafe:    int64(atomic.LoadUint64(&g.wallSafe)),
+		Drifts:      atomic.LoadUint32(&g.drifts),
 	}
 }
 
@@ -424,7 +412,7 @@ func (g *Generator) seqOverflowLoop() {
 		// Under normal behaviour high load would trigger an overflow and load would remain roughly
 		// steady, so a seq reset will simply get triggered by a time change happening in New().
 		// The actual callers are in a pessimistic loop and will check the condition themselves again.
-		if g.seqMax >= atomic.LoadUint32(g.seq) {
+		if g.seqMax >= atomic.LoadUint32(&g.seq) {
 			g.seqOverflowCond.Broadcast()
 
 			continue
@@ -434,11 +422,11 @@ func (g *Generator) seqOverflowLoop() {
 		// calls to New() come in, meaning there's no one to actually reset the sequence.
 		var (
 			wallNow = uint64(t.UnixNano()-epochNsec) / TimeUnit
-			wallHi  = atomic.LoadUint64(g.wallHi)
+			wallHi  = atomic.LoadUint64(&g.wallHi)
 		)
 
 		if wallNow > wallHi {
-			atomic.StoreUint32(g.seq, g.seqMin)
+			atomic.StoreUint32(&g.seq, g.seqMin)
 			g.seqOverflowCond.Broadcast()
 
 			continue // Left for readability of flow.

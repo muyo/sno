@@ -182,24 +182,24 @@ func testGeneratorNewTickTocksTick(g *Generator, ids []ID) func(*testing.T) {
 		// set to 1, and wallSafe on the generator must be set accordingly.
 		snotime = staticTime
 
-		if atomic.LoadUint32(g.drifts) != 0 {
-			t.Errorf("expected [0] drifts recorded, got [%d]", atomic.LoadUint32(g.drifts))
+		if atomic.LoadUint32(&g.drifts) != 0 {
+			t.Errorf("expected [0] drifts recorded, got [%d]", atomic.LoadUint32(&g.drifts))
 		}
 
-		if atomic.LoadUint64(g.wallSafe) != 0 {
-			t.Errorf("expected wallSafe to be [0], is [%d]", atomic.LoadUint64(g.wallSafe))
+		if atomic.LoadUint64(&g.wallSafe) != 0 {
+			t.Errorf("expected wallSafe to be [0], is [%d]", atomic.LoadUint64(&g.wallSafe))
 		}
 
 		for j := 512; j < 1024; j++ {
 			ids[j] = g.New(255)
 		}
 
-		if atomic.LoadUint32(g.drifts) != 1 {
-			t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(g.drifts))
+		if atomic.LoadUint32(&g.drifts) != 1 {
+			t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(&g.drifts))
 		}
 
-		if atomic.LoadUint64(g.wallSafe) == atomic.LoadUint64(staticWallNow) {
-			t.Errorf("expected wallSafe to be [%d], was [%d]", atomic.LoadUint64(staticWallNow), atomic.LoadUint64(g.wallSafe))
+		if atomic.LoadUint64(&g.wallSafe) == atomic.LoadUint64(staticWallNow) {
+			t.Errorf("expected wallSafe to be [%d], was [%d]", atomic.LoadUint64(staticWallNow), atomic.LoadUint64(&g.wallSafe))
 		}
 
 		for i := 0; i < 512; i++ {
@@ -248,8 +248,8 @@ func testGeneratorNewTickTocksSafetySlumber(g *Generator, ids []ID) func(*testin
 			t.Errorf("expected to sleep for no more than [%f]ns, took [%d] instead", 3*TimeUnit, monoDiff)
 		}
 
-		if atomic.LoadUint32(g.drifts) != 1 {
-			t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(g.drifts))
+		if atomic.LoadUint32(&g.drifts) != 1 {
+			t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(&g.drifts))
 		}
 
 		snotime = snotimeReal
@@ -289,8 +289,8 @@ func testGeneratorNewTickTocksTock(g *Generator, ids []ID) func(*testing.T) {
 
 		wg.Wait()
 
-		if atomic.LoadUint32(g.drifts) != 2 {
-			t.Errorf("expected [2] drifts recorded, got [%d]", atomic.LoadUint32(g.drifts))
+		if atomic.LoadUint32(&g.drifts) != 2 {
+			t.Errorf("expected [2] drifts recorded, got [%d]", atomic.LoadUint32(&g.drifts))
 		}
 
 		for i := 0; i < g.Cap(); i++ {
@@ -359,12 +359,12 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if uint64(snapshot.WallSafe) != atomic.LoadUint64(g.wallSafe) {
-		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(g.wallSafe))
+	if uint64(snapshot.WallSafe) != atomic.LoadUint64(&g.wallSafe) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(&g.wallSafe))
 	}
 
-	if uint64(snapshot.WallHi) != atomic.LoadUint64(g.wallHi) {
-		t.Errorf("expected [%d], got [%d]", snapshot.WallHi, atomic.LoadUint64(g.wallHi))
+	if uint64(snapshot.WallHi) != atomic.LoadUint64(&g.wallHi) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallHi, atomic.LoadUint64(&g.wallHi))
 	}
 
 	// Second test, with a snapshot taken "in the future" (relative to current wall clock time).
@@ -387,12 +387,12 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if uint64(snapshot.WallSafe) != atomic.LoadUint64(g.wallSafe) {
-		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(g.wallSafe))
+	if uint64(snapshot.WallSafe) != atomic.LoadUint64(&g.wallSafe) {
+		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(&g.wallSafe))
 	}
 
-	if atomic.LoadUint64(g.wallHi) != wall {
-		t.Errorf("expected [%d], got [%d]", wall, atomic.LoadUint64(g.wallHi))
+	if atomic.LoadUint64(&g.wallHi) != wall {
+		t.Errorf("expected [%d], got [%d]", wall, atomic.LoadUint64(&g.wallHi))
 	}
 }
 
@@ -846,7 +846,7 @@ func TestGenerator_Snapshot(t *testing.T) {
 		t.Errorf("expected [%d], got [%d]", seq, actual.Sequence)
 	}
 
-	atomic.AddUint32(g.drifts, 1)
+	atomic.AddUint32(&g.drifts, 1)
 	wallNow := snotime()
 	g.New(255) // First call will catch a zero wallHi and reset the sequence, while we want to measure an incr.
 	g.New(255)

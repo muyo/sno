@@ -70,7 +70,7 @@ func TestID_Partition(t *testing.T) {
 }
 
 func TestID_Sequence(t *testing.T) {
-	expected := atomic.LoadUint32(generator.seq) + 1
+	expected := atomic.LoadUint32(&generator.seq) + 1
 	actual := generator.New(255).Sequence()
 
 	if actual != uint16(expected) {
