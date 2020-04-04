@@ -28,13 +28,12 @@ func testEncodingDecode(t *testing.T) {
 }
 
 func runEncodingWithFallback(name string, t *testing.T, f func(t *testing.T)) {
-	if hasVectorSupport {
-		t.Run(name+"-vectorized", f)
-	} else {
+	if !hasVectorSupport {
 		t.Run(name+"-fallback", f)
 		return
 	}
 
+	t.Run(name+"-vectorized", f)
 	hasVectorSupport = false
 	t.Run(name+"-fallback", f)
 	hasVectorSupport = true
