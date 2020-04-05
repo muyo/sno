@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestCPU(t *testing.T) {
+func testCPU(t *testing.T) {
 	t.Run("features", func(t *testing.T) {
 		t.Run("real", testCPUReal)
 		t.Run("mocked", testCPUMocked)

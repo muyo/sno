@@ -1,8 +1,8 @@
 // +build !windows !amd64
 
-package sno
+package internal
 
-import _ "unsafe" // required to use //go:linkname
+import _ "unsafe"
 
 // ostime returns the current wall clock time reported by the OS.
 //
@@ -21,8 +21,8 @@ import _ "unsafe" // required to use //go:linkname
 // despite an entire ID being generated alongside. That is, if you're fine with the precision reduced to 4ms.
 //
 // On Windows/amd64 we use an even more efficient implementation which allows us to also bypass
-// some unnecessary unit conversions, which isn't as trivially possible on POSIXy systems (due to how
-// their kernels keep track of time and provide secs and fractional secs instead of a singular higher
+// some unnecessary unit conversions, which isn't as trivially possible on POSIXy systems (as their
+// kernels keep track of time and provide secs and fractional secs instead of a singular higher
 // resolution source).
 //
 // See https://lore.kernel.org/linux-arm-kernel/20190621095252.32307-1-vincenzo.frascino@arm.com
@@ -31,9 +31,8 @@ import _ "unsafe" // required to use //go:linkname
 //go:linkname ostime runtime.walltime1
 func ostime() (sec int64, nsec int32)
 
-// snotimeReal implements snotime.
-func snotimeReal() uint64 {
+func Snotime() uint64 {
 	wallSec, wallNsec := ostime()
 
-	return (uint64(wallSec)*1e9 + uint64(wallNsec) - epochNsec) / TimeUnit
+	return (uint64(wallSec)*1e9 + uint64(wallNsec) - epochNsec) / timeUnit
 }

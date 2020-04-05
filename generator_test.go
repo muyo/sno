@@ -1,4 +1,4 @@
-// +build !bench
+// +build test
 
 package sno
 
@@ -8,6 +8,47 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	_ "unsafe"
+
+	"github.com/muyo/sno/internal"
+)
+
+// snotime is the actual time source used by Generators during tests.
+//
+// We split on build tags ("test") to swap out the snotime() implementations provided by platform specific
+// code so that tests can use mocked time sources without in any way impacting a Generator's runtime performance
+// in production builds.
+//
+// Note: Attempting to run the test suite without the "test" build tag will fail, resulting in several
+// compilation errors.
+var snotime = internal.Snotime
+
+// monotime provides real monotonic clock readings to several tests.
+//go:linkname monotime runtime.nanotime
+func monotime() int64
+
+// staticTime provides tests with a fake time source which returns a fixed time on each call.
+// The time returned can be changed by directly (atomically) mutating the underlying variable.
+func staticTime() uint64 {
+	return atomic.LoadUint64(staticWallNow)
+}
+
+// staticIncTime provides tests with a fake time source which returns a time based on a fixed time
+// monotonically increasing by 1 TimeUnit on each call.
+func staticIncTime() uint64 {
+	wall := atomic.LoadUint64(staticWallNow) + atomic.LoadUint64(staticInc)*TimeUnit
+
+	atomic.AddUint64(staticInc, 1)
+
+	return wall
+}
+
+var (
+	staticInc     = new(uint64)
+	staticWallNow = func() *uint64 {
+		wall := snotime()
+		return &wall
+	}()
 )
 
 func TestGenerator_NewNoOverflow(t *testing.T) {
@@ -214,7 +255,7 @@ func testGeneratorNewTickTocksTick(g *Generator, ids []ID) func(*testing.T) {
 			}
 		}
 
-		snotime = snotimeReal
+		snotime = internal.Snotime
 	}
 }
 
@@ -252,7 +293,7 @@ func testGeneratorNewTickTocksSafetySlumber(g *Generator, ids []ID) func(*testin
 			t.Errorf("expected [1] drift recorded, got [%d]", atomic.LoadUint32(&g.drifts))
 		}
 
-		snotime = snotimeReal
+		snotime = internal.Snotime
 	}
 }
 
@@ -299,7 +340,7 @@ func testGeneratorNewTickTocksTock(g *Generator, ids []ID) func(*testing.T) {
 			}
 		}
 
-		snotime = snotimeReal
+		snotime = internal.Snotime
 	}
 }
 
@@ -330,7 +371,7 @@ func testGeneratorNewTickTocksRace(g *Generator, ids []ID) func(*testing.T) {
 		}
 		wgOuter.Wait()
 
-		snotime = snotimeReal
+		snotime = internal.Snotime
 	}
 }
 
@@ -368,7 +409,7 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 	}
 
 	// Second test, with a snapshot taken "in the future" (relative to current wall clock time).
-	wall = snotimeReal()
+	wall = internal.Snotime()
 	atomic.StoreUint64(staticWallNow, wall+100*TimeUnit)
 
 	// Simulate another regression. Takes place in the future - we are going to take a snapshot
@@ -378,7 +419,7 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 	atomic.AddUint64(staticWallNow, ^uint64(TimeUnit-1))
 	g.New(255)
 
-	snotime = snotimeReal
+	snotime = internal.Snotime
 
 	snapshot = g.Snapshot()
 
