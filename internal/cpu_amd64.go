@@ -27,8 +27,8 @@ func HasVectorSupport() bool {
 		return false
 	}
 
-	// e & 0x00000008 -> BMI1
-	// e & 0x00000100 -> BMI2
+	// b & 0x00000008 -> BMI1
+	// b & 0x00000100 -> BMI2
 	_, ebx, _, _ := cpuid(7)
 
 	return (ebx & 0x00000108) == 0x00000108

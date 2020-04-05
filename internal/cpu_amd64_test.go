@@ -5,10 +5,8 @@ import (
 )
 
 func testCPU(t *testing.T) {
-	t.Run("features", func(t *testing.T) {
-		t.Run("real", testCPUReal)
-		t.Run("mocked", testCPUMocked)
-	})
+	t.Run("real", testCPUReal)
+	t.Run("mocked", testCPUMocked)
 }
 
 // First tests are run against the real hardware and actual cpuid instruction.
@@ -18,7 +16,7 @@ func testCPU(t *testing.T) {
 // assume they should be.
 func testCPUReal(t *testing.T) {
 	t.Run("highest-function-parameter-valid", testCPURealMFIValid)
-	t.Run("sse-has-base-set", testCPURealSSEHasBaseSet)
+	t.Run("has-base-set", testCPURealHasBaseSet)
 	t.Run("has-vector-support-attempt", testCPURealHasVectorSupportAttempt)
 }
 
@@ -29,7 +27,7 @@ func testCPURealMFIValid(t *testing.T) {
 	}
 }
 
-func testCPURealSSEHasBaseSet(t *testing.T) {
+func testCPURealHasBaseSet(t *testing.T) {
 	_, _, _, edx := cpuid(1)
 	if (edx & (1 << 26)) == 0 {
 		t.Error("expected the SSE2 instruction set to be available, does not appear to be")
@@ -54,9 +52,8 @@ func testCPUMocked(t *testing.T) {
 
 	t.Run("highest-function-parameter-invalid", testCPUHasVectorSupportMFIInvalid)
 	t.Run("highest-function-parameter-too-low", testCPUHasVectorSupportMFILow)
-	t.Run("sse-lacks-base-set", testCPUHasVectorSupportSSELacksBaseSet)
-	t.Run("sse-lacks-extended-sets", testCPUHasVectorSupportSSELacksExtendedSets)
-	t.Run("bmi-lacks-sets", testCPUHasVectorSupportBMILacksSets)
+	t.Run("lacks-base-set", testCPUHasVectorSupportLacksBaseSet)
+	t.Run("lacks-extended-sets", testCPUHasVectorSupportLacksExtendedSets)
 	t.Run("passes", testCPUHasVectorPasses)
 
 	// Restore real implementation.
@@ -83,7 +80,7 @@ func testCPUHasVectorSupportMFILow(t *testing.T) {
 	expectVectorSupport(t, false)
 }
 
-func testCPUHasVectorSupportSSELacksBaseSet(t *testing.T) {
+func testCPUHasVectorSupportLacksBaseSet(t *testing.T) {
 	defer func() {
 		catch(t, recover(), cpuLacksSSE2ErrMsg)
 	}()
@@ -93,43 +90,33 @@ func testCPUHasVectorSupportSSELacksBaseSet(t *testing.T) {
 	expectVectorSupport(t, false)
 }
 
-func testCPUHasVectorSupportSSELacksExtendedSets(t *testing.T) {
+func testCPUHasVectorSupportLacksExtendedSets(t *testing.T) {
 	defer func() {
 		catch(t, recover(), "")
 	}()
 
 	for _, c := range []struct {
 		name string
-		mask uint32
+		ebx  uint32
+		ecx  uint32
 	}{
-		{"SSE3", ^uint32(0x00000001)},
-		{"SSSE3", ^uint32(0x00000200)},
-		{"SSE4", ^uint32(0x00080000)},
-		{"SSE4.2", ^uint32(0x00100000)},
+		{"SSE3", 0, ^uint32(0x00000001)},
+		{"SSSE3", 0, ^uint32(0x00000200)},
+		{"SSE4", 0, ^uint32(0x00080000)},
+		{"SSE4.2", 0, ^uint32(0x00100000)},
+		{"BMI1", ^uint32(0x00000008), 0},
+		{"BMI2", ^uint32(0x00000100), 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			cpu.reset()
-			cpu.ecx = c.mask
-			expectVectorSupport(t, false)
-		})
-	}
-}
+			if c.ebx != 0 {
+				cpu.ebx = c.ebx
+			}
 
-func testCPUHasVectorSupportBMILacksSets(t *testing.T) {
-	defer func() {
-		catch(t, recover(), "")
-	}()
+			if c.ecx != 0 {
+				cpu.ecx = c.ecx
+			}
 
-	for _, c := range []struct {
-		name string
-		mask uint32
-	}{
-		{"BMI1", ^uint32(0x00000008)},
-		{"BMI2", ^uint32(0x00000100)},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			cpu.reset()
-			cpu.ebx = c.mask
 			expectVectorSupport(t, false)
 		})
 	}
