@@ -432,8 +432,8 @@ func TestGenerator_NewGeneratorRestoreRegressions(t *testing.T) {
 		t.Errorf("expected [%d], got [%d]", snapshot.WallSafe, atomic.LoadUint64(&g.wallSafe))
 	}
 
-	if atomic.LoadUint64(&g.wallHi) != wall {
-		t.Errorf("expected [%d], got [%d]", wall, atomic.LoadUint64(&g.wallHi))
+	if wall > atomic.LoadUint64(&g.wallHi) {
+		t.Errorf("expected smaller than [%d], got [%d]", wall, atomic.LoadUint64(&g.wallHi))
 	}
 }
 

@@ -79,22 +79,6 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		return nil, err
 	}
 
-	var (
-		wallHi   = uint64(snapshot.WallHi)
-		wallSafe = uint64(snapshot.WallSafe)
-	)
-
-	if wallSafe != 0 {
-		wallNow := snotime()
-		// Since we can't currently infer whether it'd be safe to simply resume (e.g. whether
-		// the snapshot got taken during a simple drift - a single regression, or while contenders
-		// were sleeping during a multi-regression), we take the safe route out and set wallHi so
-		// that the multi-regression branch will get triggered until WallSafe.
-		if wallSafe > wallNow {
-			wallHi = wallNow
-		}
-	}
-
 	return &Generator{
 		partition:       partitionToInternalRepr(snapshot.Partition),
 		seq:             snapshot.Sequence,
@@ -104,8 +88,8 @@ func newGeneratorFromSnapshot(snapshot GeneratorSnapshot, c chan<- *SequenceOver
 		seqOverflowCond: sync.NewCond(&sync.Mutex{}),
 		seqOverflowChan: c,
 		drifts:          snapshot.Drifts,
-		wallHi:          wallHi,
-		wallSafe:        wallSafe,
+		wallHi:          uint64(snapshot.WallHi),
+		wallSafe:        uint64(snapshot.WallSafe),
 	}, nil
 }
 
