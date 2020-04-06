@@ -17,22 +17,21 @@ go get -u github.com/muyo/sno
 
 ### Features
 
-- **10 bytes** in its binary representation, canonically **encoded as 16 characters** (➜ [Encoding](#encoding)).
-  <br />The encoding is URL-safe and non-ambiguous. It also happens to be at the binary length of UUIDs - 
-  meaning **sno**s can be stored as UUIDs in your database of choice, if that is preferred.
-- **K-sortable** in either representation
-- Embedded timestamp with a **4msec resolution**, bounded within the years **2010 - 2079**. Handles time regressions gracefully,
-  without waiting (➜ [Time and sequence](#time-and-sequence))
-- Embedded byte for arbitrary data (➜ [Metabyte](#metabyte))
-- ‭A pool of at minimum **16,384,000** IDs per second:
+- **Compact** - **10 bytes** in its binary representation, canonically [encoded](#encoding) as **16 characters**.
+  <br />URL-safe and non-ambiguous encoding which also happens to be at the binary length of UUIDs - 
+  **sno**s can be stored as UUIDs in your database of choice.
+- **K-sortable** in either representation.
+- **[Embedded timestamp](#time-and-sequence)** with a **4msec resolution**, bounded within the years **2010 - 2079**. 
+  <br />Handles clock drifts gracefully, without waiting.
+- **[Embedded byte](#metabyte)** for arbitrary data.
+- **[Simple data layout](#layout)** - straightforward to inspect or encode/decode.
+- **[Optional and flexible](#usage)** configuration and coordination.
+- **[Fast](./benchmark#results)**, wait-free, safe for concurrent use.
+<br />Clocks in at about 500 LoC, has no external dependencies and minimal dependencies on std.
+- ‭A pool of **≥ 16,384,000** IDs per second.
 <br /> 65,536 guaranteed unique IDs per 4msec per partition (65,536 combinations) per metabyte 
-(256 combinations) per tick-tock (1 bit adjustment for clock drifts ➜ [Time and sequence](#time-and-sequence)). 
-**549,755,813,888,000** is the global pool **per second** when the metabyte, partition and tick-tock are 
-taken into account.
-- **Simple data layout** - straightforward to inspect or encode/decode (➜ [Layout](#layout))
-- Configuration and coordination optional (➜ [Usage](#usage))
-- **Fast**, wait-free, safe for concurrent use (➜ [Benchmarks](#benchmarks))
-<br />Clocks in at just over 500 LoC, has  no external dependencies and minimal dependencies on std.
+(256 combinations) per tick-tock (1 bit adjustment for clock drifts). 
+**549,755,813,888,000** is the global pool **per second** when all components are taken into account.
 
 ### Non-features / cons
 
@@ -46,7 +45,7 @@ unpredictability of IDs is a must. They still, however, meet the common requirem
 
 <br />
 
-## Usage (➜ [API reference](https://pkg.go.dev/github.com/muyo/sno?tab=doc))
+## Usage (➜ [API](https://pkg.go.dev/github.com/muyo/sno?tab=doc))
 
 **sno** comes with a package-level generator on top of letting you configure your own generators. 
 
@@ -59,19 +58,19 @@ id := sno.New(0)
 Where `0` is the ➜ [Metabyte](#metabyte).<br />
 
 The global generator is immutable and private. It's therefore also not possible to restore it using a Snapshot. 
-It uses 2 pseudo random bytes as its partition, meaning its partition changes across restarts.
-
-*As soon as you run more than 1 generator, you **should** start coordinating* the creation of generators to 
-actually *guarantee* a collision-free ride. This applies to all ID specs of the Snowflake variant.
+Its Partition is based on time and changes across restarts.
 
 ### Partitions (➜ [doc](https://pkg.go.dev/github.com/muyo/sno?tab=doc#Partition))
 
-Partitions are one of several friends you have to get you those guarantees. A partition is 2 bytes. 
+As soon as you run more than 1 generator, you **should** start coordinating the creation of Generators to 
+actually *guarantee* a collision-free ride. This applies to all specs of the Snowflake variant.
+
+Partitions are one of several friends you have to get you those guarantees. A Partition is 2 bytes. 
 What they mean and how you define them is up to you.
 
 ```go
 generator, err := sno.NewGenerator(&sno.GeneratorSnapshot{
-	Partition: sno.Partition{65, 255}, // the same as: sno.Partition{'A', 255}
+	Partition: sno.Partition{'A', 10}
 }, nil)
 ```
 
@@ -81,8 +80,8 @@ them (➜ [Sequence sharding](#sequence-sharding)).
 ### Snapshots (➜ [doc](https://pkg.go.dev/github.com/muyo/sno?tab=doc#GeneratorSnapshot))
 
 Snapshots happen to serve both as configuration and a means of saving and restoring generator data. They are 
-optional - simply pass `nil` to `NewGenerator()`, and what you get will be configured like the package-level generator, 
-tied to a random partition.
+optional - simply pass `nil` to `NewGenerator()`, to get a Generator with sane defaults and a unique (in-process)
+Partition.
 
 Snapshots can be taken at runtime:
 
@@ -90,7 +89,7 @@ Snapshots can be taken at runtime:
 s := generator.Snapshot()
 ```
 
-This exposes most of a generator's internal bookkeeping data. In an ideal world where programmers are not lazy 
+This exposes most of a Generator's internal bookkeeping data. In an ideal world where programmers are not lazy 
 until their system runs into an edge case - you'd persist that snapshot across restarts and restore generators 
 instead of just creating them from scratch each time. This will keep you safe both if a large clock drift happens 
 during the restart -- or before, and you just happen to come back online again "in the past", relative to IDs that 
@@ -519,22 +518,22 @@ The following alphabet is used:
 
 This is 2 contiguous ASCII ranges: `50..57` (digits) and `97..120` (*strictly* lowercase letters).
 
-On `amd64` encoding/decoding is vectorized and **extremely fast** (➜ [Benchmarks](./master/benchmark/README.md#encodingdecoding)).
+On `amd64` encoding/decoding is vectorized and **[extremely fast](./benchmark#encodingdecoding)**.
 
 <br />
 
 ## Alternatives
 
-| Name        | Binary (bytes) | Encoded (chars)* | Sortable  | Random**  | Metadata
-|------------:|:--------------:|:----------------:|:---------:|:---------:|:---------:
-| [UUID]      |       16       |        36        |   ![no]   | ![yes]    | ![no]
-| [KSUID]     |       20       |        27        |   ![yes]  | ![yes]    | ![no]
-| [ULID]      |       16       |        26        |   ![yes]  | ![yes]    | ![no]
-| [Sandflake] |       16       |        26        |   ![yes]  | ![meh]    | ![no]
-| [cuid]      |       n/a      |        25        |   ![yes]  | ![meh]    | ![no]
-| [xid]       |       12       |        20        |   ![yes]  | ![no]     | ![no]
-| **sno**     |       10       |      **16**      |   ![yes]  | ![no]     | ![yes]
-| [Snowflake] |      **8**     |       ≤20        |   ![yes]  | ![no]     | ![no]
+| Name        | Binary (bytes) | Encoded (chars)* | Sortable  | Random**  | Metadata | nsec/ID
+|------------:|:--------------:|:----------------:|:---------:|:---------:|:--------:|--------:
+| [UUID]      |       16       |        36        |   ![no]   | ![yes]    | ![no]    | ≥36.3
+| [KSUID]     |       20       |        27        |   ![yes]  | ![yes]    | ![no]    | 206.0
+| [ULID]      |       16       |        26        |   ![yes]  | ![yes]    | ![no]    | ≥50.3
+| [Sandflake] |       16       |        26        |   ![yes]  | ![meh]    | ![no]    | 224.0
+| [cuid]      |     ![no]      |        25        |   ![yes]  | ![meh]    | ![no]    | 342.0
+| [xid]       |       12       |        20        |   ![yes]  | ![no]     | ![no]    |  19.4
+| **sno**     |       10       |      **16**      |   ![yes]  | ![no]     | ![yes]   | **8.8**
+| [Snowflake] |      **8**     |       ≤20        |   ![yes]  | ![no]     | ![no]    |  28.9
 
 
 [UUID]: https://github.com/gofrs/uuid
@@ -555,24 +554,9 @@ On `amd64` encoding/decoding is vectorized and **extremely fast** (➜ [Benchmar
 coordination-based IDs. [Sandflake] and [cuid] do contain entropy, but not sufficient to rely on entropy
 alone to avoid collisions (3 bytes and 4 bytes respectively).<br />
 
-## Benchmarks
+For performance results see ➜ [Benchmark](./benchmark). `≥` values given for libraries which provide more
+than one variant, whereas the fastest one is listed.
 
-```
-sno/unbounded   136208883           8.80 ns/op      0 B/op          0 allocs/op
-xid              59964620          19.4 ns/op       0 B/op          0 allocs/op
-uuid/v1          33327685          36.3 ns/op       0 B/op          0 allocs/op
-ulid/math        23083492          50.3 ns/op      16 B/op          1 allocs/op
-sno/bounded      21022425          61.0 ns/op       0 B/op          0 allocs/op
-ulid/crypto       5797293         204 ns/op        16 B/op          1 allocs/op
-uuid/v4           5660026         205 ns/op        16 B/op          1 allocs/op
-ksuid             5430244         206 ns/op         0 B/op          0 allocs/op
-sandflake         5427452         224 ns/op         3 B/op          1 allocs/op
-snowflake         4917784         244 ns/op         0 B/op          0 allocs/op
-cuid              3507404         342 ns/op        55 B/op          4 allocs/op
-sonyflake           31000       38938 ns/op         0 B/op          0 allocs/op
-```
-
-Full results and the harness can be found in the ➜ [Benchmark](./benchmark) directory.
 
 <br /><br />
 

@@ -10,7 +10,7 @@ go test -run=^$ -bench=. -benchmem
 
 Platform: `Go 1.14.1 | i7 4770K (Haswell; 4 physical, 8 logical cores) @ 4.4GHz | Win 10`, ran on `2020/04/06`.
 
-All libraries being compared are listed as ➜ [Alternatives](./README.md#alternatives) in the root package.
+All libraries being compared are listed as ➜ [Alternatives](../README.md#alternatives) in the root package.
 
 <br />
 
