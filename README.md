@@ -519,10 +519,7 @@ The following alphabet is used:
 
 This is 2 contiguous ASCII ranges: `50..57` (digits) and `97..120` (*strictly* lowercase letters).
 
-On amd64 the enc/dec steps are vectorized and **extremely cheap** (➜ [Benchmarks](#benchmarks)) if the 
-CPU supports them.
-
-
+On `amd64` encoding/decoding is vectorized and **extremely fast** (➜ [Benchmarks](./master/benchmark/README.md#encodingdecoding)).
 
 <br />
 
@@ -539,9 +536,8 @@ CPU supports them.
 | **sno**     |       10       |      **16**      |   ![yes]  | ![no]     | ![yes]
 | [Snowflake] |      **8**     |       ≤20        |   ![yes]  | ![no]     | ![no]
 
-All of the above link to Go implementations based on popularity (GH stars) or per recommended implementations in specs.
 
-[UUID]: https://github.com/satori/go.uuid
+[UUID]: https://github.com/gofrs/uuid
 [KSUID]: https://github.com/segmentio/ksuid
 [cuid]: https://github.com/lucsky/cuid
 [Snowflake]: https://github.com/bwmarrin/snowflake
@@ -561,152 +557,22 @@ alone to avoid collisions (3 bytes and 4 bytes respectively).<br />
 
 ## Benchmarks
 
-Platform: `Go 1.12 | i7 4770K (Haswell; 4 physical, 8 logical cores) @ 4.4GHz | Win 10`, ran on `2019/06/03` using 
-tip branches of all libs.
-
-### Generation
-
-**Disclaimer**: this comparison must **not** be taken for its raw numbers. See the explanation 
-(primarily about the `Unbounded` suffix) afterwards.
-
 ```
-BenchmarkSnoUnbounded   100000000               13.2 ns/op             0 B/op          0 allocs/op
-BenchmarkXid            50000000                19.9 ns/op             0 B/op          0 allocs/op
-BenchmarkSno            20000000                61.0 ns/op             0 B/op          0 allocs/op
-BenchmarkUUIDv1         20000000                80.7 ns/op             0 B/op          0 allocs/op
-BenchmarkSnowflake       5000000               244 ns/op               0 B/op          0 allocs/op
-BenchmarkKSUID           5000000               264 ns/op               0 B/op          0 allocs/op
-BenchmarkUUIDv4          5000000               269 ns/op              16 B/op          1 allocs/op
-BenchmarkULID            5000000               282 ns/op              16 B/op          1 allocs/op
-BenchmarkSandflake       5000000               297 ns/op               3 B/op          1 allocs/op
-BenchmarkCuid            5000000               363 ns/op              55 B/op          4 allocs/op
-BenchmarkSonyflake         50000             38969 ns/op               0 B/op          0 allocs/op
+sno/unbounded   136208883           8.80 ns/op      0 B/op          0 allocs/op
+xid              59964620          19.4 ns/op       0 B/op          0 allocs/op
+uuid/v1          33327685          36.3 ns/op       0 B/op          0 allocs/op
+ulid/math        23083492          50.3 ns/op      16 B/op          1 allocs/op
+sno/bounded      21022425          61.0 ns/op       0 B/op          0 allocs/op
+ulid/crypto       5797293         204 ns/op        16 B/op          1 allocs/op
+uuid/v4           5660026         205 ns/op        16 B/op          1 allocs/op
+ksuid             5430244         206 ns/op         0 B/op          0 allocs/op
+sandflake         5427452         224 ns/op         3 B/op          1 allocs/op
+snowflake         4917784         244 ns/op         0 B/op          0 allocs/op
+cuid              3507404         342 ns/op        55 B/op          4 allocs/op
+sonyflake           31000       38938 ns/op         0 B/op          0 allocs/op
 ```
 
-```
-BenchmarkSnoUnbounded-8 100000000               17.8 ns/op             0 B/op          0 allocs/op
-BenchmarkXid-8          100000000               18.2 ns/op             0 B/op          0 allocs/op
-BenchmarkSno-8          20000000                61.0 ns/op             0 B/op          0 allocs/op
-BenchmarkUUIDv4-8       10000000               143 ns/op              16 B/op          1 allocs/op
-BenchmarkSandflake-8    10000000               179 ns/op               3 B/op          1 allocs/op
-BenchmarkUUIDv1-8       10000000               181 ns/op               0 B/op          0 allocs/op
-BenchmarkSnowflake-8     5000000               244 ns/op               0 B/op          0 allocs/op
-BenchmarkCuid-8          5000000               344 ns/op              55 B/op          4 allocs/op
-BenchmarkULID-8          5000000               392 ns/op              16 B/op          1 allocs/op
-BenchmarkKSUID-8         3000000               404 ns/op               0 B/op          0 allocs/op
-BenchmarkSonyflake-8       50000             38995 ns/op               0 B/op          0 allocs/op
-```
-
-Notes: Each ran in isolation, averages from 10 runs each. The increase in **sno**'s *unbounded* case was somewhat 
-unexpected in the parallel test (branch prediction?) but remained consistent. 
-
-<details>
-<summary>About the results</summary>
-<p>
-
-
-**Snowflakes**
-
-What does `Unbounded` mean? [xid], for example, is unbounded, i.e. it does not prevent you from generating more IDs 
-than it has a pool for (nor does it account for time). In other words - at high enough throughput you simply and 
-silently start overwriting already generated IDs. *Realistically* you are not going to fill its pool of 
-a 16,777,216 capacity. But it does reflect in synthetic benchmarks. [Sandflake] does not bind nor handle clock 
-drifts either. In both cases their results are `WYSIWYG`.
-
-The implementations that do bind, approach this issue (and clock drifts) differently. [Sonyflake] goes to sleep, 
-[Snowflake] spins aggressively to get the OS time. **sno**, when about to overflow, starts a single timer and 
-locks all overflowing requests on a condition, waking them up when the sequence resets, i.e. time changes.
-
-Both of the above are edge cases, *realistically* - Go's benchmarks happen to saturate the capacities and hit 
-those cases. **Most of the time what you get is the unbounded overhead**.  Expect said overhead of the 
-implementations to be considerably lower, but still higher than [xid] and **sno** due to their locking nature. 
-Similarily, expect some of the generation calls to **sno** to be considerably *slower* when they drop into an 
-edge case branch, but still very much in the same logarithmic ballpark.
-
-Note: the `61.0ns/op` is our **throughput upper bound** - `1s / 61.0 ns`, yields `16,393,442`. It's an imprecise measure, 
-but it actually reflects `16,384,000` - our pool per second. 
-
-If you shrink that capacity using custom sequence bounds (➜ [Sequence](#sequence)) - that number, 
-`61.0ns/op`, will start growing exponentially, but only if/as your burst through the available capacity.
-
-[Sonyflake], for example, is limited to 256 IDs per 10msec (25 600 per second), which is why its numbers *appear* so 
-high - and why the comparison has a disclaimer.
-
-**Entropy**
-
-All entropy-based implementations lock - and will naturally be slower as they need to read from a entropy source and 
-have more bits to fiddle with. [ULID] implementation required manual locking of rand.Reader for the parallel test.
-
-**Verdict**
-
-*None* of the libraries is *slow*, and speed of generation at those levels is a *mostly irrelevant* metric to begin 
-with, contrary to some opinions here or there. 
-
-Pick one that best suits your needs as far as its composition goes - one that has the best properties for 
-*your* datasets. 
-
-The few cycles you might save generating an ID are worth `nil` compared to the immeasurable time your system will spend 
-processing vast quantities of those IDs - moving them over the wire from one format to another, sorting them, copying 
-them, seeking for them in databases. People might end up needing to type/copy them into a form. Your system admins may 
-need to be able to grep similar IDs visually in large datasets rushing over consoles spread over 2^24 monitors in 3 
-different DCs - the ability to trilocate being a minimal hiring requirement, of course - making Cypher's setup aboard 
-the Nebuchadnezzar look like a child's toy box (ops are people too!). 
-
-*Those* are the *real* problems!
-
-</p>
-</details>
-
-
-### Encoding/decoding
-
-```
-BenchmarkSnoEncodeVector-8          2000000000               0.85 ns/op           0 B/op          0 allocs/op
-BenchmarkSnoEncodeScalar-8          1000000000               2.21 ns/op           0 B/op          0 allocs/op
-BenchmarkSnoEncodePureGoFallback-8  1000000000               2.66 ns/op           0 B/op          0 allocs/op
-BenchmarkStdLibEncode-8             30000000                12.5 ns/op            0 B/op          0 allocs/op
-
-BenchmarkSnoDecodeVector-8          2000000000               1.02 ns/op           0 B/op          0 allocs/op
-BenchmarkSnoDecodeScalar-8          500000000                2.41 ns/op           0 B/op          0 allocs/op
-BenchmarkSnoDecodePureGoFallback-8  500000000                3.10 ns/op           0 B/op          0 allocs/op
-BenchmarkStdLibDecode-8             50000000                31.8 ns/op            0 B/op          0 allocs/op
-```
-The above forms the baseline. Comparisons below use the vectorized assembly code in sno's case.
-
-Go's std library for reference only, as a cost estimate - it handles arbitrary sizes, padding and validation, 
-and can't make assumptions like our libraries can.
-
-#### Comparison
-
-Encoding
-```
-BenchmarkSno-8          2000000000               1.19 ns/op            0 B/op          0 allocs/op
-BenchmarkXid-8          500000000                3.79 ns/op            0 B/op          0 allocs/op
-BenchmarkULID-8         300000000                5.82 ns/op            0 B/op          0 allocs/op
-BenchmarkSnowflake-8    100000000               16.1 ns/op            32 B/op          1 allocs/op
-BenchmarkSandflake-8    100000000               18.2 ns/op            32 B/op          1 allocs/op
-BenchmarkUUIDv4-8       100000000               18.3 ns/op            48 B/op          1 allocs/op
-BenchmarkUUIDv1-8       100000000               18.9 ns/op            48 B/op          1 allocs/op
-BenchmarkKSUID-8        30000000                55.2 ns/op             0 B/op          0 allocs/op
-```
-Using: `String()`, provided by all packages.
-
-Decoding
-```
-BenchmarkSno-8          2000000000               1.14 ns/op            0 B/op          0 allocs/op
-BenchmarkUlid-8         300000000                5.05 ns/op            0 B/op          0 allocs/op
-BenchmarkXid-8          200000000                6.90 ns/op            0 B/op          0 allocs/op
-BenchmarkSnowflake-8    200000000                7.32 ns/op            0 B/op          0 allocs/op
-BenchmarkKSUID-8        30000000                36.0 ns/op             0 B/op          0 allocs/op
-BenchmarkUUIDv1-8       50000000                36.1 ns/op            48 B/op          1 allocs/op
-BenchmarkUUIDv4-8       50000000                36.4 ns/op            48 B/op          1 allocs/op
-BenchmarkSandflake-8    20000000                89.5 ns/op            32 B/op          1 allocs/op
-```
-Using: `sno.FromEncodedString`, `xid.FromString`, `snowflake.ParseString`, `sandflake.Parse`, `ksuid.Parse`,  
-`ulid.Parse`, `uuid.FromString`
-
-[Sonyflake] has no canonical encoding and [cuid] is base36 only (no binary representation) so they
-were not included. Expect JSON (un)marshal performance to be similar.
+Full results and the harness can be found in the ➜ [Benchmark](./benchmark) directory.
 
 <br /><br />
 
