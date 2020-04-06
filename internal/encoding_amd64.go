@@ -1,8 +1,12 @@
 package internal
 
+// Encode returns the sno32-encoded representation of src as an array of 16 bytes.
 //go:noescape
 func Encode(src *[10]byte) (dst [16]byte)
 
+// Decode returns the binary representation of a sno32-encoded src as an array of bytes.
+//
+// Src does not get validated and must have a length of 16 - otherwise Decode will panic.
 //go:noescape
 func Decode(src []byte) (dst [10]byte)
 

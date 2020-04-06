@@ -115,7 +115,7 @@ func TestGenerator_NewOverflows(t *testing.T) {
 		seqOverflows = 16
 		seqMin       = uint16(seqPool)
 		seqMax       = uint16(2*seqPool - 1)
-		sampleSize   = int(seqPool * seqOverflows)
+		sampleSize   = seqPool * seqOverflows
 
 		c       = make(chan *SequenceOverflowNotification)
 		cc      = make(chan struct{})
@@ -444,7 +444,7 @@ func TestGenerator_NewWithTimeOverflows(t *testing.T) {
 		seqOverflows = 4
 		seqMin       = uint16(seqPool)
 		seqMax       = uint16(2*seqPool - 1)
-		sampleSize   = int(seqPool * seqOverflows)
+		sampleSize   = seqPool * seqOverflows
 
 		g, err = NewGenerator(&GeneratorSnapshot{
 			Partition:   part,

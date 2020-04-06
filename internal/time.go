@@ -2,7 +2,7 @@
 
 package internal
 
-import _ "unsafe"
+import _ "unsafe" // Required for go:linkname
 
 // ostime returns the current wall clock time reported by the OS.
 //
@@ -31,6 +31,7 @@ import _ "unsafe"
 //go:linkname ostime runtime.walltime1
 func ostime() (sec int64, nsec int32)
 
+// Snotime returns the current wall clock time reported by the OS as adjusted to our internal epoch.
 func Snotime() uint64 {
 	wallSec, wallNsec := ostime()
 

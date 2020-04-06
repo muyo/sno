@@ -13,7 +13,7 @@ var (
 	// Decoding LUT.
 	dec [256]byte
 
-	// Dummy flag to be set by the appropriate build (used by tests).
+	// Dummy flag to be set by the respective build (used by tests).
 	hasVectorSupport bool
 )
 
@@ -27,6 +27,7 @@ func init() {
 	}
 }
 
+// Encode returns the sno32-encoded representation of src as an array of 16 bytes.
 func Encode(src *[10]byte) (dst [16]byte) {
 	dst[15] = enc[src[9]&0x1F]
 	dst[14] = enc[(src[9]>>5|src[8]<<3)&0x1F]
@@ -49,6 +50,9 @@ func Encode(src *[10]byte) (dst [16]byte) {
 	return
 }
 
+// Decode returns the binary representation of a sno32-encoded src as an array of bytes.
+//
+// Src does not get validated and must have a length of 16 - otherwise Decode will panic.
 func Decode(src []byte) (dst [10]byte) {
 	_ = src[15] // BCE hint.
 

@@ -15,9 +15,6 @@ os:
 
 dist: bionic
 
-env:
-  - GO111MODULE=on
-
 before_install:
   - go get github.com/mattn/goveralls
 

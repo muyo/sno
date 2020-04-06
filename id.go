@@ -18,11 +18,11 @@ const (
 	SizeEncoded = 16
 
 	// Epoch is the offset to the Unix epoch, in seconds, that ID timestamps are embedded with.
-	// 1262304000 corresponds to 2010-01-01 00:00:00 UTC
+	// Corresponds to 2010-01-01 00:00:00 UTC.
 	Epoch     = 1262304000
 	epochNsec = Epoch * 1e9
 
-	// TimeUnit is the time unit timestamps are embedded with - 4msec.
+	// TimeUnit is the time unit timestamps are embedded with - 4msec, as expressed in nanoseconds.
 	TimeUnit = 4e6
 
 	// MaxTimestamp is the max number of time units that can be embedded in an ID's timestamp.

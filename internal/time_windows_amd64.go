@@ -3,6 +3,7 @@ package internal
 //go:noescape
 func ostime() uint64
 
+// Snotime returns the current wall clock time reported by the OS as adjusted to our internal epoch.
 func Snotime() uint64 {
 	// Note: Division is left here instead of being impl in asm since the compiler optimizes this
 	// into mul+shift, which is easier to read when left in as simple division.
