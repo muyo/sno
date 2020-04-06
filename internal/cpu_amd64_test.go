@@ -41,7 +41,7 @@ func testCPURealHasVectorSupportAttempt(t *testing.T) {
 
 	// Note: We don't care about the result as we can't assume to get a 'true'.
 	// We only care for this to not panic.
-	HasVectorSupport()
+	checkVectorSupport()
 }
 
 // Note: Those tests must not run in parallel to any tests that rely
@@ -172,7 +172,7 @@ func catch(t *testing.T, err interface{}, expected string) {
 }
 
 func expectVectorSupport(t *testing.T, expected bool) {
-	if actual := HasVectorSupport(); actual != expected {
+	if actual := checkVectorSupport(); actual != expected {
 		t.Errorf("expected [%t], got [%t]", expected, actual)
 	}
 }

@@ -7,7 +7,8 @@ import (
 
 func Test(t *testing.T) {
 	t.Run("cpu", testCPU)
-	t.Run("snotime", testSnotime)
+	t.Run("time", testSnotime)
+	t.Run("encoding", testEncoding)
 }
 
 func testSnotime(t *testing.T) {

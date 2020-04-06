@@ -2,7 +2,7 @@ package internal
 
 const cpuLacksSSE2ErrMsg = "sno: CPU does not seem to support SSE2 instructions required on amd64 platforms"
 
-func HasVectorSupport() bool {
+func checkVectorSupport() bool {
 	// We need a highest function parameter of at least 7 since we need
 	// to check for BMI2 support as well.
 	eax, _, _, _ := cpuid(0)

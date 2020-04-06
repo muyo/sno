@@ -21,8 +21,8 @@ DATA interleave<>+0(SB)/8, $0x1f1f1f1f1f1f1f1f
 DATA interleave<>+8(SB)/8, $0x1f1f1f1f1f1f1f1f
 GLOBL interleave<>(SB), (NOPTR+RODATA), $16
 
-// func encode(src *ID) (dst [SizeEncoded]byte)
-TEXT ·encode(SB), NOSPLIT, $0-24
+// func Encode(src *[10]byte) (dst [16]byte)
+TEXT ·Encode(SB), NOSPLIT, $0-24
     MOVQ  src+0(FP), BX
 
     MOVQ   0(BX), AX
@@ -100,8 +100,8 @@ encodeFinish:
     RET
 
 
-//func decode(src []byte) (dst ID)
-TEXT ·decode(SB), NOSPLIT, $0-34
+//func Decode(src []byte) (dst [10]byte)
+TEXT ·Decode(SB), NOSPLIT, $0-34
     // The entirety of this function is simply the inverse of encode.
     MOVQ  src+0(FP), BX
     LEAQ  dst+24(FP), DX

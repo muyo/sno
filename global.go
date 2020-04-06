@@ -4,6 +4,8 @@ import (
 	"sort"
 	"time"
 	"unsafe"
+
+	"github.com/muyo/sno/internal"
 )
 
 var (
@@ -64,7 +66,7 @@ func FromEncodedString(src string) (id ID, err error) {
 	}
 
 	// We only read in the data pointer (and input is read-only), so this does the job.
-	return decode(*(*[]byte)(unsafe.Pointer(&src))), nil
+	return internal.Decode(*(*[]byte)(unsafe.Pointer(&src))), nil
 }
 
 type collection []ID

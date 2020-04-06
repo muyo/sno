@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"time"
 	"unsafe"
+
+	"github.com/muyo/sno/internal"
 )
 
 const (
@@ -90,7 +92,7 @@ func (id ID) IsZero() bool {
 // String implements fmt.Stringer by returning the base32-encoded representation of the ID
 // as a string.
 func (id ID) String() string {
-	enc := encode(&id)
+	enc := internal.Encode((*[10]byte)(&id))
 	dst := enc[:]
 
 	return *(*string)(unsafe.Pointer(&dst))
@@ -120,7 +122,7 @@ func (id *ID) UnmarshalBinary(src []byte) error {
 // MarshalText implements encoding.TextMarshaler by returning the base32-encoded representation
 // of the ID as a byte slice.
 func (id ID) MarshalText() ([]byte, error) {
-	b := encode(&id)
+	b := internal.Encode((*[10]byte)(&id))
 
 	return b[:], nil
 }
@@ -132,7 +134,7 @@ func (id *ID) UnmarshalText(src []byte) error {
 		return &InvalidDataSizeError{Size: len(src)}
 	}
 
-	*id = decode(src)
+	*id = internal.Decode(src)
 
 	return nil
 }
@@ -154,7 +156,7 @@ func (id ID) MarshalJSON() ([]byte, error) {
 	}
 
 	dst := []byte("\"                \"")
-	enc := encode(&id)
+	enc := internal.Encode((*[10]byte)(&id))
 	copy(dst[1:], enc[:])
 
 	return dst, nil
@@ -176,7 +178,7 @@ func (id *ID) UnmarshalJSON(src []byte) error {
 		return &InvalidDataSizeError{Size: n}
 	}
 
-	*id = decode(src[1 : n-1])
+	*id = internal.Decode(src[1 : n-1])
 
 	return nil
 }
@@ -244,7 +246,7 @@ func (id *ID) Scan(value interface{}) error {
 	case string:
 		switch len(v) {
 		case SizeEncoded:
-			*id = decode(*(*[]byte)(unsafe.Pointer(&v)))
+			*id = internal.Decode(*(*[]byte)(unsafe.Pointer(&v)))
 		case 0:
 			*id = zero
 		default:
