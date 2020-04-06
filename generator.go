@@ -111,6 +111,7 @@ func newGeneratorFromDefaults(c chan<- *SequenceOverflowNotification) (*Generato
 
 // New generates a new ID using the current system time for its timestamp.
 func (g *Generator) New(meta byte) (id ID) {
+retry:
 	var (
 		// Note: Single load of wallHi for the evaluations is correct (as we only grab wallNow
 		// once as well).
@@ -160,7 +161,7 @@ func (g *Generator) New(meta byte) (id ID) {
 		g.seqOverflowCount--
 		g.seqOverflowCond.L.Unlock()
 
-		return g.New(meta)
+		goto retry
 	}
 
 	// Time progression branch.
@@ -180,7 +181,7 @@ func (g *Generator) New(meta byte) (id ID) {
 	if wallHi = atomic.LoadUint64(&g.wallHi); wallNow >= wallHi {
 		g.regression.Unlock()
 
-		return g.New(meta)
+		goto retry
 	}
 
 	if wallNow > g.wallSafe {
@@ -207,7 +208,7 @@ func (g *Generator) New(meta byte) (id ID) {
 
 	time.Sleep(time.Duration(g.wallSafe - wallNow))
 
-	return g.New(meta)
+	goto retry
 }
 
 // NewWithTime generates a new ID using the given time for the timestamp.
@@ -226,11 +227,12 @@ func (g *Generator) New(meta byte) (id ID) {
 // This utility is primarily meant to enable porting of old IDs to sno and assumed to be ran
 // before an ID scheme goes online.
 func (g *Generator) NewWithTime(meta byte, t time.Time) (id ID) {
+retry:
 	var seq = atomic.AddUint32(&g.seqStatic, 1)
 
 	if seq > g.seqMax {
 		if !atomic.CompareAndSwapUint32(&g.seqStatic, seq, g.seqMin) {
-			return g.NewWithTime(meta, t)
+			goto retry
 		}
 
 		seq = g.seqMin
