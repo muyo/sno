@@ -154,8 +154,8 @@ func TestGenerator_NewOverflows(t *testing.T) {
 
 	// TODO(alcore) The non-blocking writes are far from reliable. The notifications need a rework with
 	// deep profiling.
-	if atomic.LoadInt64(notesHi) < int64(seqOverflows)/2 {
-		t.Errorf("expected at least [%d] overflow notification, got [%d]", seqOverflows/2, atomic.LoadInt64(notesHi))
+	if atomic.LoadInt64(notesHi) < int64(seqOverflows)/4 {
+		t.Errorf("expected at least [%d] overflow notification, got [%d]", seqOverflows/4, atomic.LoadInt64(notesHi))
 	}
 
 	timeDist := make(map[int64]int)

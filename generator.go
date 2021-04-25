@@ -120,7 +120,7 @@ retry:
 	)
 
 	// Fastest branch if we're still within the most recent time unit.
-	if wallHi == wallNow {
+	if wallNow == wallHi {
 		seq := atomic.AddUint32(&g.seq, 1)
 
 		if g.seqMax >= seq {
@@ -199,7 +199,7 @@ retry:
 
 		g.regression.Unlock()
 
-		return id
+		return
 	}
 
 	// Branch for all routines that are in an "unsafe" past (e.g. multiple time regressions happened

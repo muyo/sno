@@ -11,21 +11,12 @@ func testEncoding(t *testing.T) {
 }
 
 var encdec = [...]struct {
-	enc [10]byte
 	dec string
+	enc [10]byte
 }{
-	{
-		[10]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		"2222222222222222",
-	},
-	{
-		[10]byte{78, 111, 33, 96, 160, 255, 154, 10, 16, 51},
-		"brpk4q72xwf2m63l",
-	},
-	{
-		[10]byte{255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
-		"xxxxxxxxxxxxxxxx",
-	},
+	{"2222222222222222", [10]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+	{"brpk4q72xwf2m63l", [10]byte{78, 111, 33, 96, 160, 255, 154, 10, 16, 51}},
+	{"xxxxxxxxxxxxxxxx", [10]byte{255, 255, 255, 255, 255, 255, 255, 255, 255, 255}},
 }
 
 func testEncodingEncode(t *testing.T) {
