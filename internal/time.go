@@ -28,7 +28,7 @@ import _ "unsafe" // Required for go:linkname
 // See https://lore.kernel.org/linux-arm-kernel/20190621095252.32307-1-vincenzo.frascino@arm.com
 // to get an overview of the perf numbers involved on Linux-based distros.
 //
-//go:linkname ostime runtime.walltime1
+//go:linkname ostime runtime.walltime
 func ostime() (sec int64, nsec int32)
 
 // Snotime returns the current wall clock time reported by the OS as adjusted to our internal epoch.
