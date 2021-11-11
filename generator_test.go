@@ -285,8 +285,8 @@ func testGeneratorNewTickTocksSafetySlumber(g *Generator, ids []ID) func(*testin
 		// the same since time was static (got incremented only after the sleep).
 		if monoDiff < 2*TimeUnit {
 			t.Errorf("expected to sleep for at least [%f]ns, took [%d] instead", 2*TimeUnit, monoDiff)
-		} else if monoDiff > 3*TimeUnit {
-			t.Errorf("expected to sleep for no more than [%f]ns, took [%d] instead", 3*TimeUnit, monoDiff)
+		} else if monoDiff > 5*TimeUnit {
+			t.Errorf("expected to sleep for no more than [%f]ns, took [%d] instead", 5*TimeUnit, monoDiff)
 		}
 
 		if atomic.LoadUint32(&g.drifts) != 1 {
