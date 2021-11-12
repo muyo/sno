@@ -1,4 +1,6 @@
-// +build !windows,!amd64
+//go:build !(windows && amd64) && !(linux && amd64 && go1.17)
+// +build !windows !amd64
+// +build !linux !amd64 !go1.17
 
 package internal
 
